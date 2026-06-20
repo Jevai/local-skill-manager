@@ -238,16 +238,29 @@ async def delete_skill(name: str, request: Request):
         raise HTTPException(404, "Skill not found")
 
     body = await request.json()
-    paths_to_delete = body.get("locations", [])
+    raw_locations = body.get("locations", [])
 
+    # Extract path strings from location objects (frontend sends [{path, writable}])
+    paths_to_delete = []
+    for item in raw_locations:
+        if isinstance(item, str):
+            paths_to_delete.append(item)
+        elif isinstance(item, dict) and "path" in item:
+            paths_to_delete.append(item["path"])
+
+    # Fallback: use all writable locations from target skill
     if not paths_to_delete:
         paths_to_delete = [loc["path"] for loc in target["locations"] if loc["writable"]]
 
     deleted = []
     skipped = []
 
+    # Normalize all paths for comparison
+    paths_to_delete = [os.path.normpath(p) for p in paths_to_delete]
+
     for loc in target["locations"]:
-        if loc["path"] not in paths_to_delete:
+        norm_loc_path = os.path.normpath(loc["path"])
+        if norm_loc_path not in paths_to_delete:
             continue
         if not loc["writable"]:
             skipped.append(f"{loc['path']} (只读)")
