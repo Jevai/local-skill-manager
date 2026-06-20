@@ -92,14 +92,12 @@ function renderSkills() {
     el.className = "skill-item" + (selectedSkill && selectedSkill.name === skill.name ? " active" : "");
     el.onclick = () => selectSkill(skill.name);
     const readonly = !skill.can_delete;
-    // Show source labels instead of just "X 位置"
-    const srcLabels = [...new Set(skill.locations.map(l => l.source_label))];
     el.innerHTML =
       '<div class="skill-item-name">' + escHtml(skill.name) + "</div>" +
       '<div class="skill-item-desc">' + escHtml(truncate(skill.description || "", 50)) + "</div>" +
       '<div class="skill-item-meta">' +
-        '<span class="meta-status ' + (readonly ? "readonly" : "writable") + '">' + (readonly ? "只读" : "可写") + "</span>" +
-        '<span class="src-labels">' + srcLabels.map(function(l) { return '<span class="src-label">' + escHtml(l) + "</span>"; }).join("") + "</span>" +
+        '<span class="' + (readonly ? "readonly" : "writable") + '">' + (readonly ? "只读" : "可写") + "</span>" +
+        "<span>" + skill.locations.length + " 位置</span>" +
       "</div>";
     container.appendChild(el);
   }
@@ -202,7 +200,7 @@ function renderFileTreeInteractive(items, skill, depth) {
       "</div>";
       html += '<div class="ft-children" data-dir="' + escHtml(relPath) + '">' + renderFileTreeInteractive(item.children, skill, depth + 1) + "</div>";
     } else {
-      html += '<div class="ft-item file" data-rel-path="' + escHtml(relPath) + '" data-depth="' + depth + '" style="padding-left:' + (12 + indent) + 'px" onclick="openFile(this.dataset.relPath, this)">' +
+      html += '<div class="ft-item file" data-rel-path="' + escHtml(relPath) + '" data-depth="' + depth + '" style="padding-left:' + (12 + indent) + 'px" onclick="openFile(\'' + jsEscape(relPath) + "', this)\">" +
         getFileIcon(item.name) + " " + escHtml(item.name) +
       "</div>";
     }
@@ -240,6 +238,25 @@ async function openFile(relPath, el) {
 
   if (ext === "md") {
     bodyEl.innerHTML = renderMarkdown(content);
+  } else if (["py", "js", "ts", "jsx", "tsx"].includes(ext)) {
+    bodyEl.innerHTML = '<div class="code-block hl-code">' + highlightCode(content, ext) + "</div>";
+  } else if (ext === "json") {
+    try {
+      const pretty = JSON.stringify(JSON.parse(content), null, 2);
+      bodyEl.innerHTML = '<div class="code-block hl-code">' + highlightJson(pretty) + "</div>";
+    } catch (e) {
+      bodyEl.innerHTML = '<div class="code-block hl-code">' + escHtml(content) + "</div>";
+    }
+  } else if (["yaml", "yml"].includes(ext)) {
+    bodyEl.innerHTML = '<div class="code-block hl-code">' + highlightYaml(content) + "</div>";
+  } else if (["sh", "bash", "bat", "cmd"].includes(ext)) {
+    bodyEl.innerHTML = '<div class="code-block hl-code">' + highlightSh(content) + "</div>";
+  } else if (["html", "htm", "xml", "svg"].includes(ext)) {
+    bodyEl.innerHTML = '<div class="code-block hl-code">' + highlightXml(content) + "</div>";
+  } else if (["css", "scss", "less"].includes(ext)) {
+    bodyEl.innerHTML = '<div class="code-block hl-code">' + highlightCss(content) + "</div>";
+  } else if (["sql"].includes(ext)) {
+    bodyEl.innerHTML = '<div class="code-block hl-code">' + highlightSql(content) + "</div>";
   } else {
     bodyEl.innerHTML = '<div class="code-block">' + escHtml(content) + "</div>";
   }
@@ -260,7 +277,7 @@ function getFileIcon(name) {
   const ext = name.split(".").pop().toLowerCase();
   if (["md"].includes(ext)) return "\uD83D\uDCDC";  // 📝
   if (["py"].includes(ext)) return "\uD83D\uDC23";  // 🐍
-  if (["js", "ts", "jsx", "tsx"].includes(ext)) return "\uD83D\uDCDC";  // 📜
+  if (["js", "ts", "jsx", "tsx"].includes(ext)) return "\uD83D\uDCDC";  // 📜 (reuse)
   if (["json"].includes(ext)) return "\uD83D\uDCCB";  // 📋
   if (["yaml", "yml"].includes(ext)) return "\u2699\uFE0F";  // ⚙️
   if (["sh", "bash"].includes(ext)) return "\uD83D\uDCBB";  // 🖥️
@@ -271,7 +288,7 @@ function getFileIcon(name) {
   return "\uD83D\uDCC4";  // 📄
 }
 
-// ========== Markdown Renderer (no syntax highlighting) ==========
+// ========== Syntax Highlighting ==========
 function escHtml(str) {
   if (!str) return "";
   const div = document.createElement("div");
@@ -283,10 +300,121 @@ function jsEscape(str) {
   return str.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
+// Generic highlighter helpers
+function hlWrap(cls, text) {
+  return '<span class="hl-' + cls + '">' + text + "</span>";
+}
+
+function highlightCode(code, lang) {
+  let result = escHtml(code);
+
+  // Comments first (so they override everything)
+  result = result.replace(/(#.*$)/gm, (m) => hlWrap("comment", m));
+  result = result.replace(/(\/\/.*$)/gm, (m) => hlWrap("comment", m));
+  result = result.replace(/(\/\*[\s\S]*?\*\/)/g, (m) => hlWrap("comment", m));
+
+  // Strings
+  result = result.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|`[^`]*`|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, (m) => hlWrap("string", m));
+
+  // Numbers
+  result = result.replace(/\b(\d+\.?\d*)\b/g, (m) => hlWrap("number", m));
+
+  // Keywords
+  const pyKw = /\b(def|class|import|from|as|if|elif|else|for|while|try|except|finally|with|return|yield|raise|pass|break|continue|and|or|not|in|is|lambda|global|nonlocal|assert|del|async|await)\b/g;
+  const jsKw = /\b(const|let|var|function|class|extends|import|export|default|if|else|for|while|do|switch|case|break|continue|return|throw|try|catch|finally|new|this|typeof|instanceof|in|of|async|await|yield|void|delete|null|undefined|true|false)\b/g;
+
+  if (lang === "py") {
+    result = result.replace(pyKw, (m) => hlWrap("keyword", m));
+    result = result.replace(/(@\w+)/g, (m) => hlWrap("builtin", m));
+    result = result.replace(/\b(self|cls|True|False|None|print|len|range|str|int|list|dict|set|tuple|open|super|type|isinstance|hasattr|getattr|setattr|property|staticmethod|classmethod)\b/g, (m) => hlWrap("builtin", m));
+    result = result.replace(/\bdef\s+(\w+)/g, (m, name) => "def " + hlWrap("func", name));
+  } else if (["js", "ts", "jsx", "tsx"].includes(lang)) {
+    result = result.replace(jsKw, (m) => hlWrap("keyword", m));
+    result = result.replace(/\b(console|document|window|Math|Array|Object|String|Number|Boolean|Promise|Map|Set|JSON|require|module|exports|process|Buffer|Error|Date|RegExp)\b/g, (m) => hlWrap("builtin", m));
+    result = result.replace(/(function\s+)?(\w+)\s*\(/g, (m, _kw, name) => (_kw || "") + hlWrap("func", name) + "(");
+    if (["jsx", "tsx"].includes(lang)) {
+      result = result.replace(/(&lt;\/?)([\w]+)/g, (m, open, tag) => open + hlWrap("tag", tag));
+    }
+  }
+
+  return result;
+}
+
+function highlightJson(code) {
+  let result = escHtml(code);
+  // Keys
+  result = result.replace(/(".*?")\s*:/g, (m, key) => hlWrap("prop", key) + ":");
+  // String values
+  result = result.replace(/:\s*(".*?")/g, (m, val) => ": " + hlWrap("string", val));
+  // Numbers
+  result = result.replace(/:\s*(\d+\.?\d*)/g, (m) => ": " + hlWrap("number", m.slice(2)));
+  // Booleans / null
+  result = result.replace(/:\s*(true|false|null)/g, (m) => ": " + hlWrap("keyword", m.slice(2)));
+  return result;
+}
+
+function highlightYaml(code) {
+  let result = escHtml(code);
+  result = result.replace(/(#.*$)/gm, (m) => hlWrap("comment", m));
+  result = result.replace(/^(\s*)([\w][\w\s\-]*?)(\s*:\s)/gm, (m, indent, key, colon) => indent + hlWrap("prop", key) + colon);
+  result = result.replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, (m) => hlWrap("string", m));
+  result = result.replace(/\b(true|false|null|yes|no|on|off)\b/gi, (m) => hlWrap("keyword", m));
+  result = result.replace(/\b(\d+\.?\d*)\b/g, (m) => hlWrap("number", m));
+  return result;
+}
+
+function highlightSh(code) {
+  let result = escHtml(code);
+  result = result.replace(/(#.*$)/gm, (m) => hlWrap("comment", m));
+  result = result.replace(/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g, (m) => hlWrap("string", m));
+  result = result.replace(/(\$[\w{}]+)/g, (m) => hlWrap("builtin", m));
+  result = result.replace(/\b(if|then|else|elif|fi|for|while|do|done|case|esac|in|function|return|exit|echo|cd|ls|cp|rm|mv|mkdir|chmod|chown|export|source|set|unset|read|shift|test)\b/g, (m) => hlWrap("keyword", m));
+  result = result.replace(/(\s)(--?[\w\-]*)/g, (m, sp, flag) => sp + hlWrap("punct", flag));
+  return result;
+}
+
+function highlightXml(code) {
+  let result = escHtml(code);
+  result = result.replace(/(&lt;!--[\s\S]*?--&gt;)/g, (m) => hlWrap("comment", m));
+  result = result.replace(/(&lt;\/?)([\w:\-]+)/g, (m, open, tag) => open + hlWrap("tag", tag));
+  result = result.replace(/\s([\w:\-]+)(=)/g, (m, attr, eq) => " " + hlWrap("attr", attr) + eq);
+  result = result.replace(/(=)(".*?")/g, (m, eq, val) => eq + hlWrap("string", val));
+  return result;
+}
+
+function highlightCss(code) {
+  let result = escHtml(code);
+  result = result.replace(/(\/\*[\s\S]*?\*\/)/g, (m) => hlWrap("comment", m));
+  // Selectors before {
+  result = result.replace(/^([\w\.#\-\[\](),"':\s>+*~\|]+?)\s*\{/gm, (m, sel) => hlWrap("prop", sel) + " {");
+  // Property names
+  result = result.replace(/([\w\-]+)(\s*:)/g, (m, prop, colon) => hlWrap("prop", prop) + colon);
+  // Colors
+  result = result.replace(/(:\s*)(#[0-9a-fA-F]{3,8}\b|rgba?\([^)]+\))/gi, (m, _before, color) => ": " + hlWrap("builtin", color));
+  // Numbers with units
+  result = result.replace(/(:\s*)(-?[\d\.]+(?:px|em|rem|%|vh|vw|deg|s|ms|fr)\b)/gi, (m, before, num) => before + hlWrap("number", num));
+  // Strings
+  result = result.replace(/("(?:[^"\\]|\\.)*'|'(?:[^'\\]|\\.)*')/g, (m) => hlWrap("string", m));
+  return result;
+}
+
+function highlightSql(code) {
+  let result = escHtml(code);
+  result = result.replace(/(--.*$)/gm, (m) => hlWrap("comment", m));
+  result = result.replace(/(\/\*[\s\S]*?\*\/)/g, (m) => hlWrap("comment", m));
+  const sqlKw = /\b(SELECT|FROM|WHERE|JOIN|LEFT|RIGHT|INNER|OUTER|CROSS|ON|AND|OR|NOT|IN|IS|NULL|AS|ORDER BY|GROUP BY|HAVING|LIMIT|OFFSET|INSERT INTO|VALUES|UPDATE|SET|DELETE FROM|CREATE TABLE|DROP TABLE|ALTER TABLE|ADD|COLUMN|INDEX|PRIMARY KEY|FOREIGN KEY|REFERENCES|UNIQUE|DEFAULT|CASCADE|UNION|ALL|DISTINCT|BETWEEN|LIKE|EXISTS|CASE|WHEN|THEN|ELSE|END|OVER|PARTITION BY|ROW_NUMBER|RANK|DENSE_RANK|COUNT|SUM|AVG|MIN|MAX|COALESCE|CAST|INTO|BEGIN|COMMIT|ROLLBACK)\b/gi;
+  result = result.replace(sqlKw, (m) => hlWrap("keyword", m));
+  result = result.replace(/('(?:[^'\\]|\\.)*')/g, (m) => hlWrap("string", m));
+  result = result.replace(/\b(\d+\.?\d*)\b/g, (m) => hlWrap("number", m));
+  return result;
+}
+
+// ========== Simple Markdown Renderer ==========
 function renderMarkdown(md) {
   let html = "";
   const lines = md.split("\n");
   let inCodeBlock = false;
+  let codeLang = "";
   let codeContent = [];
   let inTable = false;
   let tableRows = [];
@@ -294,9 +422,20 @@ function renderMarkdown(md) {
   function flushCode() {
     if (inCodeBlock) {
       const raw = codeContent.join("\n");
-      html += '<pre class="md-code"><code>' + escHtml(raw) + "</code></pre>";
+      const ext = codeLang || "txt";
+      let rendered;
+      if (ext === "json") {
+        try { rendered = highlightJson(JSON.stringify(JSON.parse(raw), null, 2)); }
+        catch(e) { rendered = escHtml(raw); }
+      } else if (["py","js","ts"].includes(ext)) { rendered = highlightCode(raw, ext); }
+      else if (["yaml","yml"].includes(ext)) { rendered = highlightYaml(raw); }
+      else if (ext === "sh") { rendered = highlightSh(raw); }
+      else if (ext === "sql") { rendered = highlightSql(raw); }
+      else { rendered = escHtml(raw); }
+      html += '<pre class="md-code"><code class="hl-code">' + rendered + "</code></pre>";
       codeContent = [];
       inCodeBlock = false;
+      codeLang = "";
     }
   }
 
@@ -333,6 +472,7 @@ function renderMarkdown(md) {
       flushTable();
       if (!inCodeBlock) {
         inCodeBlock = true;
+        codeLang = line.slice(3).trim();
       } else {
         flushCode();
       }
