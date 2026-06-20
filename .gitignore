@@ -27,3 +27,9 @@ Desktop.ini
 *.log
 __pycache__/
 *.db
+
+# WorkBuddy internal (not project code)
+.workbuddy/
+
+# Docs (planning notes, not deliverables)
+docs/
