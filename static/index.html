@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SkillManager</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="header">
+    <div class="header-title">SkillManager <span>// 跨 Agent Skill 集中管理</span></div>
+    <div class="tabs" id="tabs"></div>
+  </div>
+
+  <div class="main">
+    <div class="sidebar">
+      <div class="search-box">
+        <input type="text" id="search" placeholder="搜索 skill 名称或描述...">
+      </div>
+      <div class="skill-list" id="skillList">
+        <div class="loading">加载中...</div>
+      </div>
+      <div class="sidebar-footer" id="footer"></div>
+    </div>
+
+    <div class="detail" id="detail">
+      <div class="detail-empty">选择一个 skill 查看详情</div>
+    </div>
+  </div>
+
+  <!-- Delete Modal -->
+  <div class="modal-overlay" id="deleteModal" style="display:none">
+    <div class="modal">
+      <div class="modal-title">确认删除</div>
+      <div class="modal-text">即将删除以下路径，此操作不可撤销。符号链接只会移除链接，不会删除源文件。</div>
+      <div class="modal-paths" id="deletePaths"></div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeDeleteModal()">取消</button>
+        <button class="btn btn-delete" onclick="confirmDelete()">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

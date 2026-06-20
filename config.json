@@ -1,0 +1,47 @@
+{
+  "sources": [
+    {
+      "name": "agents",
+      "label": "全局",
+      "path": "C:/Users/31585/.agents/skills",
+      "writable": true
+    },
+    {
+      "name": "trae",
+      "label": "Trae CN",
+      "path": "C:/Users/31585/.trae-cn/skills",
+      "writable": true
+    },
+    {
+      "name": "codex",
+      "label": "Codex",
+      "path": "C:/Users/31585/.codex/skills",
+      "writable": true,
+      "exclude": [".system"]
+    },
+    {
+      "name": "claude",
+      "label": "Claude Code",
+      "path": "C:/Users/31585/.claude/skills",
+      "writable": true
+    },
+    {
+      "name": "workbuddy",
+      "label": "WorkBuddy 用户级",
+      "path": "C:/Users/31585/.workbuddy/skills",
+      "writable": true
+    },
+    {
+      "name": "trae_builtin",
+      "label": "Trae 内置",
+      "path": "C:/Users/31585/.trae-cn/builtin_skills",
+      "writable": false
+    },
+    {
+      "name": "trae_builtin_global",
+      "label": "Trae 内置全局",
+      "path": "C:/Users/31585/.trae-cn/builtin/global/skills",
+      "writable": false
+    }
+  ]
+}
