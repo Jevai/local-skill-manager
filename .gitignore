@@ -29,7 +29,10 @@ __pycache__/
 *.db
 
 # WorkBuddy internal (not project code)
-.workbuddy/
+.workbuddy/skills/
+.workbuddy/agents/
+# But keep memory files tracked
+!.workbuddy/memory/
 
 # Docs (planning notes, not deliverables)
 docs/
