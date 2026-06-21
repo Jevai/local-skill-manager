@@ -8,7 +8,7 @@
 
 ## 特性
 
-- **多来源扫描** — 一次扫描 7 个 skill 来源目录（agents / Trae CN / Codex / Claude / WorkBuddy / Trae 内置 / Trae 全局内置）
+- **多来源扫描** — 一次扫描多个 skill 来源目录（agents / Trae CN / Codex / Claude / WorkBuddy / Trae 内置 / Trae 全局内置...）
 - **统一检索** — 跨来源关键词搜索，命中 name 与 description
 - **来源 tab 切换** — 按来源过滤，统计各来源 skill 数量
 - **文件树 + 预览** — 左侧树状浏览，右侧 `.md` 文件渲染（marked.js），其他文件纯文本展示
