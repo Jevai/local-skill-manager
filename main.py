@@ -337,7 +337,9 @@ async def copy_skill_check(request: Request):
             }
         })
 
-    shutil.copytree(src_path, dst_path)
+    # Pre-create destination to work around copytree sandbox issues on Windows
+    os.makedirs(dst_path, exist_ok=True)
+    shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
     return SafeJSONResponse({
         "conflict": False,
         "success": True,
@@ -390,13 +392,15 @@ async def copy_skill(request: Request):
     if strategy == "skip":
         if os.path.exists(dst_path):
             return SafeJSONResponse({"success": True, "action": "skipped", "skill_name": skill_name, "target_path": dst_path})
-        shutil.copytree(src_path, dst_path)
+        os.makedirs(dst_path, exist_ok=True)
+        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
         return SafeJSONResponse({"success": True, "action": "copied", "skill_name": skill_name, "target_path": dst_path})
 
     if strategy == "overwrite":
         if os.path.exists(dst_path):
             shutil.rmtree(dst_path)
-        shutil.copytree(src_path, dst_path)
+        os.makedirs(dst_path, exist_ok=True)
+        shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
         return SafeJSONResponse({"success": True, "action": "copied", "skill_name": skill_name, "target_path": dst_path})
 
     # strategy == "rename"
@@ -406,7 +410,8 @@ async def copy_skill(request: Request):
         counter += 1
         final_name = skill_name + "_copy" if counter == 1 else f"{skill_name}_copy{counter}"
     final_dst = os.path.join(target_base, final_name)
-    shutil.copytree(src_path, final_dst)
+    os.makedirs(final_dst, exist_ok=True)
+    shutil.copytree(src_path, final_dst, dirs_exist_ok=True)
     return SafeJSONResponse({"success": True, "action": "renamed", "renamed_to": final_name, "skill_name": skill_name, "target_path": final_dst})
 
 
