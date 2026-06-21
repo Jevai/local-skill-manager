@@ -26,6 +26,29 @@ class TestCopyCheckNoConflict:
         assert os.path.isdir(os.path.join(temp_workspace["tgt_dir"], "my-skill"))
 
 
+class TestCopyCheckTargetDirCreation:
+    """When target base directory does not exist, auto-create it."""
+
+    def test_creates_target_base_dir_if_missing(self, client, temp_workspace):
+        """Copy succeeds after creating the target base directory."""
+        import shutil
+        make_skill(temp_workspace["src_dir"], "my-skill")
+        # Remove target dir entirely to test auto-creation
+        shutil.rmtree(temp_workspace["tgt_dir"])
+
+        res = client.post("/api/skills/copy/check", json={
+            "skill_name": "my-skill",
+            "source_id": "src",
+            "target_id": "tgt",
+        })
+
+        assert res.status_code == 200
+        data = res.json()
+        assert data["conflict"] is False
+        assert data["success"] is True
+        assert os.path.isdir(os.path.join(temp_workspace["tgt_dir"], "my-skill"))
+
+
 class TestCopyCheckConflict:
     """When target already has the skill, return conflict info (no copy)."""
 

@@ -309,7 +309,10 @@ async def copy_skill_check(request: Request):
 
     src_path = target_skill["locations"][0]["path"]
     target_base = target_src["path"]
-    dst_path = os.path.join(target_base, skill_name)
+    dst_path = os.path.normpath(os.path.join(target_base, skill_name))
+
+    # Ensure target base directory exists
+    os.makedirs(target_base, exist_ok=True)
 
     if os.path.exists(dst_path):
         file_count = 0
@@ -381,6 +384,8 @@ async def copy_skill(request: Request):
     src_path = target_skill["locations"][0]["path"]
     target_base = target_src["path"]
     dst_path = os.path.join(target_base, skill_name)
+
+    os.makedirs(target_base, exist_ok=True)
 
     if strategy == "skip":
         if os.path.exists(dst_path):
