@@ -234,12 +234,12 @@ body {
 
 /* Market Detail */
 .market-content {
-  max-height: 300px;
+  flex: 1;
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px;
-  margin-bottom: 16px;
+  margin: 0 24px 16px;
 }
 .market-install {
   border-top: 1px solid var(--border);
@@ -877,6 +877,7 @@ body {
   border-radius: var(--border-radius-md, 8px);
   overflow: hidden;
   transition: border-color 0.2s;
+  margin: 0 24px 12px;
 }
 
 .market-install-card:hover {
@@ -887,7 +888,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
+  padding: 8px 14px;
   cursor: pointer;
   user-select: none;
 }
