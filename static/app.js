@@ -5,6 +5,7 @@ let selectedSkill = null;
 let selectedSource = "agents"; // default tab
 let sources = [];
 let currentFile = null;
+let currentView = "local";  // "local" | "market"
 
 // ========== Init ==========
 async function init() {
@@ -618,9 +619,165 @@ function truncate(str, len) {
   return str.length > len ? str.slice(0, len) + "..." : str;
 }
 
+// ========== View Mode ==========
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll(".view-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.view === view)
+  );
+
+  const skillList = document.getElementById("skillList");
+  const tabs = document.getElementById("tabs");
+  const search = document.getElementById("search");
+
+  if (view === "market") {
+    tabs.style.display = "none";
+    search.placeholder = "搜索市场 skill...";
+    selectedSkill = null;
+    currentFile = null;
+    renderDetail();
+    loadMarketSkills();
+  } else {
+    tabs.style.display = "";
+    search.placeholder = "搜索 skill 名称或描述...";
+    selectedSkill = null;
+    currentFile = null;
+    renderDetail();
+    applyFilter();
+    renderTabs();
+  }
+}
+
+// ========== Market Skills ==========
+let marketPage = 1;
+let marketHasMore = true;
+let marketLoading = false;
+let marketSkills = [];
+
+async function loadMarketSkills(reset = true) {
+  if (marketLoading) return;
+  if (reset) {
+    marketPage = 1;
+    marketHasMore = true;
+    marketSkills = [];
+    document.getElementById("skillList").innerHTML = "";
+  }
+  if (!marketHasMore) return;
+
+  marketLoading = true;
+  showMarketLoading();
+
+  try {
+    const q = document.getElementById("search").value.trim();
+    const params = new URLSearchParams();
+    params.set("page", marketPage);
+    if (q) params.set("search", q);
+
+    const res = await fetch("/api/market/skills?" + params.toString());
+    if (!res.ok) {
+      const err = await res.json();
+      showToast("市场加载失败: " + (err.detail || "网络错误"));
+      marketLoading = false;
+      return;
+    }
+    const data = await res.json();
+
+    if (reset) marketSkills = [];
+    marketSkills.push(...data.skills);
+    marketHasMore = data.hasMore;
+    marketPage = data.page + 1;
+
+    renderMarketSkillList();
+  } catch (e) {
+    showToast("市场加载失败: " + e.message);
+  }
+  marketLoading = false;
+}
+
+function showMarketLoading() {
+  const container = document.getElementById("skillList");
+  if (!document.getElementById("marketLoader")) {
+    const el = document.createElement("div");
+    el.id = "marketLoader";
+    el.className = "market-loader";
+    el.textContent = "加载中...";
+    container.appendChild(el);
+  }
+}
+
+function hideMarketLoading() {
+  const loader = document.getElementById("marketLoader");
+  if (loader) loader.remove();
+}
+
+function renderMarketSkillList() {
+  const container = document.getElementById("skillList");
+  const existingCount = container.querySelectorAll(".market-item").length;
+
+  for (let i = existingCount; i < marketSkills.length; i++) {
+    const skill = marketSkills[i];
+    const el = document.createElement("div");
+    el.className = "skill-item market-item";
+
+    const conflictCount = skill.conflicts ? skill.conflicts.length : 0;
+    const allConflicted = conflictCount >= 5;
+
+    if (allConflicted) {
+      el.classList.add("all-installed");
+    } else if (conflictCount > 0) {
+      el.classList.add("partial-installed");
+    }
+
+    let conflictLabel = "";
+    if (allConflicted) {
+      conflictLabel = '<span class="installed-label">已安装: 全部来源</span>';
+    } else if (conflictCount > 0) {
+      conflictLabel = '<span class="installed-label">已安装: ' + skill.conflicts.join(", ") + '</span>';
+    }
+
+    const installsLabel = formatInstalls(skill.installs);
+    const officialBadge = skill.isOfficial ? ' <span class="official-badge">官方</span>' : '';
+
+    el.innerHTML =
+      '<div class="skill-item-name">' + escHtml(skill.name) + officialBadge + '</div>' +
+      '<div class="skill-item-desc">' + escHtml(skill.source || "") + " · " + installsLabel + '</div>' +
+      '<div class="skill-item-meta">' + conflictLabel +
+      (allConflicted ? '' : ' <span class="install-btn">安装 →</span>') + '</div>';
+
+    if (!allConflicted) {
+      el.onclick = () => selectMarketSkill(skill);
+    }
+
+    container.appendChild(el);
+  }
+
+  hideMarketLoading();
+  document.getElementById("footer").textContent = "已加载 " + marketSkills.length + " 个 skill";
+}
+
+function formatInstalls(n) {
+  if (!n) return "0 安装";
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M 安装";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "K 安装";
+  return n + " 安装";
+}
+
 // ========== Search ==========
 document.getElementById("search").addEventListener("input", () => {
-  applyFilter();
+  if (currentView === "market") {
+    loadMarketSkills(true);
+  } else {
+    applyFilter();
+  }
+});
+
+// Scroll-based pagination for market view
+document.getElementById("skillList").addEventListener("scroll", function() {
+  if (currentView !== "market") return;
+  const el = this;
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+    loadMarketSkills(false);
+  }
 });
 
 init();
