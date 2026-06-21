@@ -157,7 +157,6 @@ function renderDetail() {
     "</div>" +
     '<div class="file-viewer">' +
       '<div class="file-tree-panel">' +
-        '<div class="file-tree-title">文件</div>' +
         '<div id="fileTree">' + treeHtml + "</div>" +
       "</div>" +
       '<div class="file-content-panel">' +
