@@ -653,6 +653,7 @@ let marketPage = 1;
 let marketHasMore = true;
 let marketLoading = false;
 let marketSkills = [];
+let marketSearchTimer = null;
 
 async function loadMarketSkills(reset = true) {
   if (marketLoading) return;
@@ -720,7 +721,7 @@ function renderMarketSkillList() {
     el.className = "skill-item market-item";
 
     const conflictCount = skill.conflicts ? skill.conflicts.length : 0;
-    const allConflicted = conflictCount >= 5;
+    const allConflicted = conflictCount >= sources.filter(s => s.writable).length;
 
     if (allConflicted) {
       el.classList.add("all-installed");
@@ -803,7 +804,7 @@ function renderMarketDetail(skill, detail) {
     const label = src.label + (hasConflict ? " (已存在同名)" : "");
     sourcesHtml +=
       '<label class="source-checkbox ' + (disabled ? "disabled" : "") + '">' +
-        '<input type="checkbox" value="' + src.name + '" ' + checked + ' ' + disabled + ' onchange="updateInstallButton()"> ' +
+        '<input type="checkbox" value="' + escHtml(src.name) + '" ' + checked + ' ' + disabled + ' onchange="updateInstallButton()"> ' +
         escHtml(label) +
       '</label>';
   }
@@ -962,7 +963,8 @@ function handleInstallEvent(event, progressEl) {
 // ========== Search ==========
 document.getElementById("search").addEventListener("input", () => {
   if (currentView === "market") {
-    loadMarketSkills(true);
+    clearTimeout(marketSearchTimer);
+    marketSearchTimer = setTimeout(() => loadMarketSkills(true), 300);
   } else {
     applyFilter();
   }

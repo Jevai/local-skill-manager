@@ -423,6 +423,21 @@ SKILLS_SH_BASE = "https://skills.sh"
 GITHUB_API_BASE = "https://api.github.com"
 
 
+def _check_github_rate_limit(resp) -> None:
+    """Check GitHub API rate limit headers. Raises HTTPException on limit hit."""
+    if resp.status_code in (403, 429) and resp.headers.get("X-RateLimit-Remaining") == "0":
+        reset_ts = resp.headers.get("X-RateLimit-Reset", "")
+        reset_msg = ""
+        if reset_ts:
+            from datetime import datetime, timezone
+            try:
+                reset_time = datetime.fromtimestamp(int(reset_ts), tz=timezone.utc).strftime("%H:%M:%S")
+                reset_msg = f"，重置时间 UTC {reset_time}"
+            except (ValueError, OSError):
+                pass
+        raise HTTPException(429, f"GitHub API 速率限制已达上限{reset_msg}，请稍后重试")
+
+
 async def get_http_client():
     return httpx.AsyncClient(
         timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
@@ -435,16 +450,6 @@ async def market_skills(page: int = 1, search: Optional[str] = None):
     """Proxy skills.sh all-time list, merge local conflict status."""
     config = load_config()
     writable_sources = [s for s in config["sources"] if s.get("writable")]
-    local_skills = set()
-    for src in writable_sources:
-        src_path = src["path"]
-        if not os.path.exists(src_path):
-            continue
-        for entry in os.listdir(src_path):
-            entry_path = os.path.join(src_path, entry)
-            if os.path.isdir(entry_path):
-                fm = parse_frontmatter(entry_path)
-                local_skills.add(fm.get("name") or entry)
 
     try:
         async with await get_http_client() as client:
@@ -495,6 +500,7 @@ async def market_skill_detail(owner: str, repo: str, skillId: str):
         async with await get_http_client() as client:
             headers = {"Accept": "application/vnd.github.v3.raw"}
             resp = await client.get(url, headers=headers)
+            _check_github_rate_limit(resp)
             if resp.status_code == 404:
                 raise HTTPException(404, f"Skill '{skillId}' 在 {owner}/{repo} 中不存在")
             resp.raise_for_status()
@@ -589,6 +595,11 @@ async def market_install(request: Request):
 
                 if dir_resp.status_code == 404:
                     yield f"data: {json_mod.dumps({'type': 'error', 'message': f'Skill 不存在: {owner}/{repo}/{skill_id}'})}\n\n"
+                    return
+                if dir_resp.status_code in (403, 429) and dir_resp.headers.get("X-RateLimit-Remaining") == "0":
+                    reset_ts = dir_resp.headers.get("X-RateLimit-Reset", "")
+                    reset_msg = f"，重置时间 UTC {reset_ts}" if reset_ts else ""
+                    yield f"data: {json_mod.dumps({'type': 'error', 'message': f'GitHub API 速率限制已达上限{reset_msg}，请稍后重试'})}\n\n"
                     return
                 dir_resp.raise_for_status()
                 files_info = dir_resp.json()
