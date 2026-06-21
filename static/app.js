@@ -146,12 +146,14 @@ function renderDetail() {
   container.innerHTML =
     '<div class="detail-header">' +
       '<div class="detail-name-row">' +
-        '<span class="detail-name">' + escHtml(s.name) + "</span>" +
-        '<span class="detail-source-tags">' + sourceTagsHtml + "</span>" +
-      "</div>" +
-      '<div class="detail-actions">' +
-        '<button class="btn btn-copy" onclick="openCopyModal()">复制到...</button>' +
-        '<button class="btn btn-delete" ' + (!s.can_delete ? "disabled" : "") + ' onclick="openDeleteModal()">删除</button>' +
+        '<div class="detail-name-left">' +
+          '<span class="detail-name">' + escHtml(s.name) + "</span>" +
+          '<span class="detail-source-tags">' + sourceTagsHtml + "</span>" +
+        "</div>" +
+        '<div class="detail-actions">' +
+          '<button class="btn btn-copy" onclick="openCopyModal()">复制到...</button>' +
+          '<button class="btn btn-delete" ' + (!s.can_delete ? "disabled" : "") + ' onclick="openDeleteModal()">删除</button>' +
+        "</div>" +
       "</div>" +
       '<div class="detail-desc">' + escHtml(s.description || "(无描述)") + "</div>" +
     "</div>" +

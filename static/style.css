@@ -351,7 +351,6 @@ body {
   font-size: 18px;
   font-weight: 600;
   color: var(--accent);
-  margin-bottom: 4px;
 }
 
 .detail-folder-names {
@@ -364,16 +363,25 @@ body {
 .detail-actions {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
+  flex-shrink: 0;
 }
 
 /* Source tags — inline next to skill name */
 .detail-name-row {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.detail-name-left {
+  display: flex;
   align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 4px;
+  min-width: 0;
 }
 
 .detail-source-tags {
