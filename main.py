@@ -1,12 +1,14 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 import os
 import json
 import yaml
 import shutil
 from pathlib import Path
 from typing import Optional
+
+import httpx
 
 app = FastAPI(title="SkillManager")
 
@@ -413,6 +415,279 @@ async def copy_skill(request: Request):
     os.makedirs(final_dst, exist_ok=True)
     shutil.copytree(src_path, final_dst, dirs_exist_ok=True)
     return SafeJSONResponse({"success": True, "action": "renamed", "renamed_to": final_name, "skill_name": skill_name, "target_path": final_dst})
+
+
+# ---- Market API ----
+
+SKILLS_SH_BASE = "https://skills.sh"
+GITHUB_API_BASE = "https://api.github.com"
+
+
+async def get_http_client():
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
+        follow_redirects=True,
+    )
+
+
+@app.get("/api/market/skills")
+async def market_skills(page: int = 1, search: Optional[str] = None):
+    """Proxy skills.sh all-time list, merge local conflict status."""
+    config = load_config()
+    writable_sources = [s for s in config["sources"] if s.get("writable")]
+    local_skills = set()
+    for src in writable_sources:
+        src_path = src["path"]
+        if not os.path.exists(src_path):
+            continue
+        for entry in os.listdir(src_path):
+            entry_path = os.path.join(src_path, entry)
+            if os.path.isdir(entry_path):
+                fm = parse_frontmatter(entry_path)
+                local_skills.add(fm.get("name") or entry)
+
+    try:
+        async with await get_http_client() as client:
+            resp = await client.get(f"{SKILLS_SH_BASE}/api/skills/all-time/{page}")
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.ConnectError:
+        raise HTTPException(502, "无法连接 skills.sh，请检查网络")
+    except httpx.TimeoutException:
+        raise HTTPException(502, "skills.sh 请求超时")
+    except Exception as e:
+        raise HTTPException(502, f"skills.sh 请求失败: {str(e)}")
+
+    # Client-side search filter
+    skills = data.get("skills", [])
+    if search:
+        q = search.lower()
+        skills = [s for s in skills if q in s.get("name", "").lower()]
+
+    # Annotate conflict status
+    config_sources = {s["name"]: s for s in config["sources"]}
+    for skill in skills:
+        skill_name = skill.get("name") or skill.get("skillId")
+        conflicts = []
+        for src in writable_sources:
+            if src["name"] not in config_sources:
+                continue
+            src_path = config_sources[src["name"]]["path"]
+            skill_dir = os.path.normpath(os.path.join(src_path, skill_name))
+            if os.path.exists(skill_dir):
+                conflicts.append(src["name"])
+        skill["conflicts"] = conflicts
+
+    return SafeJSONResponse({
+        "skills": skills,
+        "total": data.get("total", len(skills)),
+        "hasMore": data.get("hasMore", False),
+        "page": data.get("page", page),
+    })
+
+
+@app.get("/api/market/skill/{owner}/{repo}/{skillId}")
+async def market_skill_detail(owner: str, repo: str, skillId: str):
+    """Fetch SKILL.md content from GitHub."""
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{skillId}/SKILL.md"
+
+    try:
+        async with await get_http_client() as client:
+            headers = {"Accept": "application/vnd.github.v3.raw"}
+            resp = await client.get(url, headers=headers)
+            if resp.status_code == 404:
+                raise HTTPException(404, f"Skill '{skillId}' 在 {owner}/{repo} 中不存在")
+            resp.raise_for_status()
+            content = resp.text
+    except httpx.ConnectError:
+        raise HTTPException(502, "无法连接 GitHub，请检查网络")
+    except httpx.TimeoutException:
+        raise HTTPException(502, "GitHub 请求超时")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(502, f"GitHub 请求失败: {str(e)}")
+
+    # Parse frontmatter for name/description
+    fm = {"name": skillId, "description": ""}
+    if content.startswith("---"):
+        end = content.find("---", 3)
+        if end != -1:
+            try:
+                parsed = yaml.safe_load(content[3:end])
+                if isinstance(parsed, dict):
+                    fm = sanitize_for_json(parsed)
+            except Exception:
+                pass
+
+    return SafeJSONResponse({
+        "name": fm.get("name") or skillId,
+        "description": fm.get("description", ""),
+        "content": content,
+        "owner": owner,
+        "repo": repo,
+        "skillId": skillId,
+    })
+
+
+@app.get("/api/market/check/{skillId}")
+async def market_check(skillId: str):
+    """Check which writable sources already have this skill."""
+    config = load_config()
+    writable_sources = [s for s in config["sources"] if s.get("writable")]
+    conflicts = {}
+    for src in config["sources"]:
+        src_path = src["path"]
+        skill_dir = os.path.normpath(os.path.join(src_path, skillId))
+        conflicts[src["name"]] = os.path.exists(skill_dir)
+    return SafeJSONResponse({"conflicts": conflicts})
+
+
+@app.post("/api/market/install")
+async def market_install(request: Request):
+    """
+    Download skill files from GitHub and install to selected sources.
+    Returns SSE streaming progress.
+    """
+    import json as json_mod
+
+    body = await request.json()
+    owner = body.get("owner", "").strip()
+    repo = body.get("repo", "").strip()
+    skill_id = body.get("skillId", "").strip()
+    sources = body.get("sources", [])
+
+    if not all([owner, repo, skill_id, sources]):
+        raise HTTPException(400, "缺少必要参数: owner, repo, skillId, sources")
+
+    config = load_config()
+    writable_sources = [s for s in config["sources"] if s.get("writable")]
+    writable_names = {s["name"] for s in writable_sources}
+    all_names = {s["name"] for s in config["sources"]}
+
+    for src_name in sources:
+        if src_name not in all_names:
+            raise HTTPException(400, f"来源 '{src_name}' 不存在")
+        if src_name not in writable_names:
+            raise HTTPException(400, f"来源 '{src_name}' 不可写")
+
+    async def generate():
+        skills = []
+        steps = []
+        total = len(sources)
+        completed = 0
+        failed = 0
+
+        try:
+            # Step 1: Fetch files from GitHub
+            yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': '正在从 GitHub 获取 skill 文件...'})}\n\n"
+
+            async with await get_http_client() as client:
+                dir_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{skill_id}"
+                headers = {"Accept": "application/vnd.github.v3+json"}
+                dir_resp = await client.get(dir_url, headers=headers)
+
+                if dir_resp.status_code == 404:
+                    yield f"data: {json_mod.dumps({'type': 'error', 'message': f'Skill 不存在: {owner}/{repo}/{skill_id}'})}\n\n"
+                    return
+                dir_resp.raise_for_status()
+                files_info = dir_resp.json()
+
+                if not isinstance(files_info, list):
+                    files_info = [files_info]
+
+                fetched = 0
+                for fi in files_info:
+                    if fi.get("type") != "file":
+                        continue
+                    try:
+                        raw_url = fi.get("download_url")
+                        if not raw_url:
+                            continue
+                        file_resp = await client.get(raw_url)
+                        file_resp.raise_for_status()
+                        skills.append({
+                            "name": fi["name"],
+                            "path": fi.get("path", fi["name"]),
+                            "content": file_resp.text if isinstance(file_resp.text, str) else file_resp.content,
+                        })
+                        fetched += 1
+                        yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': f'已获取 {fetched} 个文件', 'detail': fi['name']})}\n\n"
+                    except Exception as e:
+                        yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': f'获取文件 {fi.get('name', '?')} 失败: {str(e)}', 'warning': True})}\n\n"
+
+            if not skills:
+                yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Skill 仓库中未找到任何文件'})}\n\n"
+                return
+
+            # Step 2: Install to each source
+            source_map = {s["name"]: s for s in config["sources"]}
+            for src_name in sources:
+                step = {"source": src_name, "status": "installing"}
+                steps.append(step)
+                yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'install', 'source': src_name, 'status': 'installing', 'message': f'正在安装到 {src_name}...'})}\n\n"
+
+                try:
+                    src = source_map[src_name]
+                    target_dir = os.path.normpath(os.path.join(src["path"], skill_id))
+
+                    if os.path.exists(target_dir):
+                        step["status"] = "skipped"
+                        step["message"] = f"{src_name}: 已存在同名 skill，跳过"
+                        yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'install', 'source': src_name, 'status': 'skipped', 'message': step['message']})}\n\n"
+                        completed += 1
+                        yield f"data: {json_mod.dumps({'type': 'progress', 'completed': completed, 'failed': failed, 'total': total})}\n\n"
+                        continue
+
+                    os.makedirs(target_dir, exist_ok=True)
+                    for skill in skills:
+                        file_path = os.path.normpath(os.path.join(target_dir, skill["name"]))
+                        if not file_path.startswith(target_dir):
+                            continue
+                        mode = "wb" if isinstance(skill["content"], bytes) else "w"
+                        encoding = None if isinstance(skill["content"], bytes) else "utf-8"
+                        with open(file_path, mode, encoding=encoding) as f:
+                            f.write(skill["content"])
+
+                    step["status"] = "success"
+                    completed += 1
+                    yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'install', 'source': src_name, 'status': 'success', 'message': f'{src_name}: 安装完成'})}\n\n"
+                    yield f"data: {json_mod.dumps({'type': 'progress', 'completed': completed, 'failed': failed, 'total': total})}\n\n"
+
+                except PermissionError as e:
+                    step["status"] = "error"
+                    step["message"] = f"{src_name}: 权限不足 — {str(e)}"
+                    failed += 1
+                    yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'install', 'source': src_name, 'status': 'error', 'message': step['message']})}\n\n"
+                except OSError as e:
+                    step["status"] = "error"
+                    step["message"] = f"{src_name}: 写入失败 — {str(e)}"
+                    failed += 1
+                    yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'install', 'source': src_name, 'status': 'error', 'message': step['message']})}\n\n"
+                except Exception as e:
+                    step["status"] = "error"
+                    step["message"] = f"{src_name}: {str(e)}"
+                    failed += 1
+                    yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'install', 'source': src_name, 'status': 'error', 'message': step['message']})}\n\n"
+
+            yield f"data: {json_mod.dumps({'type': 'complete', 'completed': completed, 'failed': failed, 'total': total, 'steps': [{'source': s['source'], 'status': s['status'], 'message': s.get('message', '')} for s in steps]})}\n\n"
+
+        except httpx.ConnectError:
+            yield f"data: {json_mod.dumps({'type': 'error', 'message': '无法连接 GitHub，请检查网络（中国区可能需要代理）'})}\n\n"
+        except httpx.TimeoutException:
+            yield f"data: {json_mod.dumps({'type': 'error', 'message': 'GitHub 请求超时，请稍后重试'})}\n\n"
+        except Exception as e:
+            yield f"data: {json_mod.dumps({'type': 'error', 'message': f'安装过程出错: {str(e)}'})}\n\n"
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 # Serve static files
