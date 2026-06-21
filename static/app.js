@@ -448,14 +448,48 @@ let deleteTargets = [];
 
 function openDeleteModal() {
   if (!selectedSkill || !selectedSkill.can_delete) return;
-  deleteTargets = selectedSkill.locations.filter(loc => loc.writable);
+  // 仅当前选中的来源视图：只列该来源下可写位置；"all" 视图下列全部可写位置
+  const inAllView = !selectedSource || selectedSource === "all";
+  const candidates = inAllView
+    ? selectedSkill.locations.filter(loc => loc.writable)
+    : selectedSkill.locations.filter(loc => loc.writable && loc.source === selectedSource);
+  deleteTargets = candidates;
+
+  // 弹窗标题与提示根据来源动态调整
+  const titleEl = document.querySelector("#deleteModal .modal-title");
+  const hintEl = document.getElementById("deleteHint");
+  if (titleEl) {
+    titleEl.textContent = inAllView
+      ? "确认删除（所有来源）"
+      : `确认删除（来源：${selectedSkill.locations.find(l => l.source === selectedSource)?.source_label || selectedSource}）`;
+  }
+  if (hintEl) {
+    hintEl.textContent = inAllView
+      ? "将从所有可写来源删除该 skill。符号链接只会移除链接，不会删除源文件。"
+      : "将仅从当前来源删除该 skill。符号链接只会移除链接，不会删除源文件。";
+  }
+
   const pathsEl = document.getElementById("deletePaths");
   pathsEl.innerHTML = "";
-  for (const loc of deleteTargets) {
+  if (deleteTargets.length === 0) {
     const div = document.createElement("div");
-    div.className = "path-item " + (loc.is_symlink ? "symlink" : "writable");
-    div.textContent = (loc.is_symlink ? "[symlink] " : "") + loc.path;
+    div.className = "path-item";
+    div.textContent = inAllView
+      ? "该 skill 在所有来源均为只读，无法删除"
+      : "当前来源下该 skill 为只读或不存在，无法删除";
     pathsEl.appendChild(div);
+  } else {
+    for (const loc of deleteTargets) {
+      const div = document.createElement("div");
+      div.className = "path-item " + (loc.is_symlink ? "symlink" : "writable");
+      div.textContent = (loc.is_symlink ? "[symlink] " : "") + loc.path;
+      pathsEl.appendChild(div);
+    }
+  }
+  // 没可删目标时禁用确认按钮
+  const confirmBtn = document.querySelector('#deleteModal .btn-delete');
+  if (confirmBtn) {
+    confirmBtn.disabled = deleteTargets.length === 0;
   }
   document.getElementById("deleteModal").style.display = "flex";
 }
