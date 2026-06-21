@@ -150,6 +150,7 @@ function renderDetail() {
     '<div class="detail-header">' +
       '<div class="detail-name">' + escHtml(s.name) + "</div>" +
       '<div class="detail-actions">' +
+        '<button class="btn btn-copy" onclick="openCopyModal()">复制到...</button>' +
         '<button class="btn btn-delete" ' + (!s.can_delete ? "disabled" : "") + ' onclick="openDeleteModal()">删除</button>' +
       "</div>" +
       '<div class="detail-locations">' +
@@ -479,7 +480,136 @@ async function confirmDelete() {
   await loadAllSkills();
   renderTabs();
   renderDetail();
-  alert("删除完成\n已删除: " + result.deleted.length + "\n跳过: " + result.skipped.length);
+  showToast("删除完成，已删除 " + result.deleted.length + "，跳过 " + result.skipped.length);
+}
+
+// ========== Copy ==========
+let copySourceId = null;
+let copySkillName = null;
+
+function openCopyModal() {
+  if (!selectedSkill) return;
+  copySkillName = selectedSkill.name;
+  copySourceId = selectedSkill.locations[0].source;
+
+  document.getElementById("copySkillName").textContent =
+    "将 " + copySkillName + " 复制到...";
+
+  const select = document.getElementById("copyTargetSelect");
+  select.innerHTML = "";
+  for (const src of sources) {
+    if (src.name === copySourceId) continue;
+    const opt = document.createElement("option");
+    opt.value = src.name;
+    opt.textContent = src.label + (src.writable ? "" : " (只读)");
+    opt.disabled = !src.writable;
+    select.appendChild(opt);
+  }
+
+  document.getElementById("copyConfirmBtn").disabled = false;
+  document.getElementById("copyConfirmBtn").textContent = "确认复制";
+  document.getElementById("copyModal").style.display = "flex";
+}
+
+function closeCopyModal() {
+  document.getElementById("copyModal").style.display = "none";
+}
+
+async function confirmCopy() {
+  const targetId = document.getElementById("copyTargetSelect").value;
+  const btn = document.getElementById("copyConfirmBtn");
+  btn.disabled = true;
+  btn.textContent = "复制中...";
+
+  try {
+    const res = await fetch("/api/skills/copy/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        skill_name: copySkillName,
+        source_id: copySourceId,
+        target_id: targetId
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Copy failed");
+    }
+
+    const result = await res.json();
+
+    if (result.conflict) {
+      closeCopyModal();
+      document.getElementById("conflictInfo").innerHTML =
+        '<p>目标 <strong>' + sources.find(s => s.name === targetId).label +
+        '</strong> 已存在 <strong>' + copySkillName + '</strong></p>' +
+        '<p class="modal-path">' + result.existing_skill.path + '</p>' +
+        '<p>' + result.existing_skill.file_count + ' 个文件, ' +
+        result.existing_skill.size_kb + ' KB</p>';
+      document.getElementById("conflictModal").dataset.targetId = targetId;
+      document.getElementById("conflictModal").style.display = "flex";
+    } else {
+      closeCopyModal();
+      showToast("已复制到 " + sources.find(s => s.name === targetId).label);
+      await loadAllSkills();
+      renderTabs();
+    }
+  } catch (e) {
+    closeCopyModal();
+    showToast("复制失败: " + e.message);
+  }
+}
+
+function closeConflictModal() {
+  document.getElementById("conflictModal").style.display = "none";
+}
+
+async function resolveConflict(strategy) {
+  const targetId = document.getElementById("conflictModal").dataset.targetId;
+  closeConflictModal();
+
+  const res = await fetch("/api/skills/copy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      skill_name: copySkillName,
+      source_id: copySourceId,
+      target_id: targetId,
+      strategy: strategy
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    showToast("复制失败: " + (err.detail || "Unknown error"));
+    return;
+  }
+
+  const result = await res.json();
+  let msg = "";
+  if (result.action === "copied") msg = "已复制到 " + sources.find(s => s.name === targetId).label;
+  else if (result.action === "renamed") msg = "已复制为 " + result.renamed_to;
+  else if (result.action === "skipped") msg = "已跳过";
+  showToast(msg);
+
+  await loadAllSkills();
+  renderTabs();
+}
+
+// ========== Toast ==========
+function showToast(msg) {
+  let toast = document.getElementById("toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toast";
+    toast.className = "toast";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add("show");
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => toast.classList.remove("show"), 2500);
 }
 
 // ========== Utils ==========

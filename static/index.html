@@ -43,6 +43,35 @@
     </div>
   </div>
 
+  <!-- Copy Modal - Step 1: Select Target -->
+  <div class="modal-overlay" id="copyModal" style="display:none">
+    <div class="modal">
+      <div class="modal-title">复制 Skill</div>
+      <div class="modal-text" id="copySkillName"></div>
+      <div class="form-group">
+        <label>目标来源</label>
+        <select id="copyTargetSelect"></select>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-cancel" onclick="closeCopyModal()">取消</button>
+        <button class="btn btn-primary" id="copyConfirmBtn" onclick="confirmCopy()">确认复制</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Copy Modal - Step 2: Conflict -->
+  <div class="modal-overlay" id="conflictModal" style="display:none">
+    <div class="modal">
+      <div class="modal-title">目标已存在同名 Skill</div>
+      <div id="conflictInfo" class="modal-text"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" onclick="resolveConflict('overwrite')">覆盖</button>
+        <button class="btn btn-cancel" onclick="resolveConflict('skip')">跳过</button>
+        <button class="btn btn-primary" onclick="resolveConflict('rename')">重命名</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/marked.min.js"></script>
   <script src="/static/app.js"></script>
 </body>

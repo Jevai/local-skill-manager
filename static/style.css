@@ -642,3 +642,86 @@ body {
   font-family: var(--font-mono);
   font-size: 13px;
 }
+
+/* ===== Copy modal ===== */
+.form-group {
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-group label {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+.form-group select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 14px;
+  outline: none;
+}
+.form-group select:focus {
+  border-color: var(--accent);
+}
+.form-group select option:disabled {
+  color: var(--text-dim);
+}
+
+.btn-copy {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.btn-copy:hover {
+  background: var(--accent);
+  color: #0d0d12;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #0d0d12;
+  border: none;
+}
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+}
+.btn-danger:hover { opacity: 0.85; }
+
+.modal-path {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  word-break: break-all;
+  margin: 8px 0;
+  padding: 6px 10px;
+  background: var(--bg);
+  border-radius: var(--radius);
+}
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--bg-surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  z-index: 10000;
+  opacity: 0;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
