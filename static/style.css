@@ -367,57 +367,36 @@ body {
   margin-bottom: 12px;
 }
 
-/* Locations */
-.detail-locations {
-  margin-bottom: 12px;
-}
-
-.detail-section-title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  margin-bottom: 6px;
-  font-family: var(--font-mono);
-}
-
-.detail-location {
-  padding: 6px 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+/* Source tags — inline next to skill name */
+.detail-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 4px;
-  font-size: 11px;
 }
 
-.detail-location-source {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: var(--accent);
-  font-size: 11px;
+.detail-source-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
-.detail-location-path {
+.detail-source-tag {
+  display: inline-block;
   font-family: var(--font-mono);
   font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: var(--bg);
   color: var(--text-dim);
-  margin-top: 2px;
-  word-break: break-all;
+  border: 0.5px solid var(--border);
+  font-weight: 500;
+  opacity: 0.85;
+  cursor: default;
+  white-space: nowrap;
 }
-
-.detail-location-tag {
-  display: inline-block;
-  padding: 1px 5px;
-  border-radius: 3px;
-  font-size: 9px;
-  font-family: var(--font-mono);
-  margin-left: 5px;
-}
-
-.tag-symlink { background: #2a2040; color: #cc88ff; }
-.tag-readonly { background: #2a1a1a; color: var(--danger); }
-.tag-writable { background: #1a2a1a; color: var(--accent); }
 
 /* Description */
 .detail-desc {

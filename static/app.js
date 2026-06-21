@@ -131,18 +131,13 @@ function renderDetail() {
 
   const s = selectedSkill;
 
-  // Build locations HTML
-  let locationsHtml = "";
+  // Build source tags HTML (inline next to name)
+  let sourceTagsHtml = "";
   for (const loc of s.locations) {
-    let tags = "";
-    if (loc.is_symlink) tags += '<span class="detail-location-tag tag-symlink">symlink</span>';
-    if (!loc.writable) tags += '<span class="detail-location-tag tag-readonly">只读</span>';
-    else tags += '<span class="detail-location-tag tag-writable">可写</span>';
-    locationsHtml +=
-      '<div class="detail-location">' +
-        '<div><span class="detail-location-source">' + escHtml(loc.source_label) + "</span>" + tags + "</div>" +
-        '<div class="detail-location-path">' + escHtml(loc.path) + (loc.is_symlink ? " → " + escHtml(loc.real_path || "") : "") + "</div>" +
-      "</div>";
+    const tip = loc.is_symlink
+      ? loc.path + " → " + (loc.real_path || "")
+      : loc.path;
+    sourceTagsHtml += '<span class="detail-source-tag" title="' + escHtml(tip) + '">' + escHtml(loc.source_label) + "</span>";
   }
 
   // File tree HTML
@@ -150,14 +145,13 @@ function renderDetail() {
 
   container.innerHTML =
     '<div class="detail-header">' +
-      '<div class="detail-name">' + escHtml(s.name) + "</div>" +
+      '<div class="detail-name-row">' +
+        '<span class="detail-name">' + escHtml(s.name) + "</span>" +
+        '<span class="detail-source-tags">' + sourceTagsHtml + "</span>" +
+      "</div>" +
       '<div class="detail-actions">' +
         '<button class="btn btn-copy" onclick="openCopyModal()">复制到...</button>' +
         '<button class="btn btn-delete" ' + (!s.can_delete ? "disabled" : "") + ' onclick="openDeleteModal()">删除</button>' +
-      "</div>" +
-      '<div class="detail-locations">' +
-        '<div class="detail-section-title">位置 (' + s.locations.length + ")</div>" +
-        locationsHtml +
       "</div>" +
       '<div class="detail-desc">' + escHtml(s.description || "(无描述)") + "</div>" +
     "</div>" +
