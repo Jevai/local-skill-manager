@@ -6,6 +6,7 @@ let selectedSource = "agents"; // default tab
 let sources = [];
 let currentFile = null;
 let currentView = "local";  // "local" | "market"
+let currentInstallSources = [];  // Track sources being installed
 
 // ========== Init ==========
 async function init() {
@@ -791,36 +792,25 @@ async function selectMarketSkill(skill) {
 function renderMarketDetail(skill, detail) {
   currentMarketSkill = { skill, detail };
   const container = document.getElementById("detail");
-  const conflictCount = skill.conflicts ? skill.conflicts.length : 0;
-  const installsLabel = formatInstalls(skill.installs);
-  const officialBadge = skill.isOfficial ? ' <span class="official-badge">官方 ✓</span>' : '';
 
   const writableSources = sources.filter(s => s.writable);
-  let sourcesHtml = "";
+  const hasWritable = writableSources.length > 0;
+
+  // Build pill HTML (only writable sources)
+  let pillsHtml = "";
   for (const src of writableSources) {
     const hasConflict = skill.conflicts && skill.conflicts.includes(src.name);
-    const disabled = hasConflict ? "disabled" : "";
-    const checked = hasConflict ? "" : "checked";
-    const label = src.label + (hasConflict ? " (已存在同名)" : "");
-    sourcesHtml +=
-      '<label class="source-checkbox ' + (disabled ? "disabled" : "") + '">' +
-        '<input type="checkbox" value="' + escHtml(src.name) + '" ' + checked + ' ' + disabled + ' onchange="updateInstallButton()"> ' +
-        escHtml(label) +
-      '</label>';
+    const isChecked = !hasConflict;
+    pillsHtml +=
+      '<span class="pill' + (isChecked ? ' selected' : '') + (hasConflict ? ' disabled' : '') + '"' +
+      ' data-source="' + escHtml(src.name) + '"' +
+      ' onclick="togglePill(this)">' +
+        '<span class="pill-check">✓</span> ' + escHtml(src.label) +
+      '</span>';
   }
 
-  let installHtml = "";
-  if (conflictCount < writableSources.length) {
-    installHtml =
-      '<div class="market-install">' +
-        '<div class="install-sources-title">安装到:</div>' +
-        '<div class="source-checkboxes">' + sourcesHtml + '</div>' +
-        '<button class="btn btn-primary install-button" id="installBtn" onclick="startInstall()">安装到选中来源</button>' +
-        '<div class="install-progress" id="installProgress" style="display:none"></div>' +
-      '</div>';
-  } else {
-    installHtml = '<div class="market-install"><p class="all-installed-msg">已在所有来源中安装</p></div>';
-  }
+  const installsLabel = formatInstalls(skill.installs);
+  const officialBadge = skill.isOfficial ? ' <span class="official-badge">官方 ✓</span>' : '';
 
   container.innerHTML =
     '<div class="detail-header">' +
@@ -830,35 +820,72 @@ function renderMarketDetail(skill, detail) {
       '</div>' +
       '<div class="detail-desc">' + escHtml(detail.description || "(无描述)") + '</div>' +
     '</div>' +
+
+    // NEW: Install panel card
+    (hasWritable ?
+      '<div class="market-install-card" id="installCard">' +
+
+        // Header bar (always visible)
+        '<div class="market-install-header" onclick="toggleInstallPanel()">' +
+          '<div class="market-install-header-left">' +
+            '<svg class="market-install-arrow" id="installArrow" viewBox="0 0 24 24">' +
+              '<path d="M6 9l6 6 6-6"/>' +
+            '</svg>' +
+            '<span style="font-size:12px;font-weight:500;color:var(--color-text-primary, #e0e0f0);">安装到目标源</span>' +
+            '<span class="market-install-badge" id="installBadge">0 已选</span>' +
+          '</div>' +
+          '<button class="btn btn-primary" id="installBtn" onclick="event.stopPropagation();startInstall()" ' +
+            'style="padding:5px 14px;font-size:11px;">安装</button>' +
+        '</div>' +
+
+        // Pill area (collapsible)
+        '<div class="market-install-pills" id="installPills" style="display:none;">' +
+          pillsHtml +
+        '</div>' +
+
+        // Progress area (hidden initially)
+        '<div class="market-install-progress" id="installProgress" style="display:none;"></div>' +
+
+      '</div>' : '') +
+
     '<div class="market-content">' +
       renderMarkdown(detail.content || "") +
-    '</div>' +
-    installHtml;
+    '</div>';
+
+  // Update badge count after render
+  updateInstallBadge();
 }
 
-function updateInstallButton() {
-  const btn = document.getElementById("installBtn");
-  if (!btn) return;
-  const checked = document.querySelectorAll(".source-checkbox input:checked");
-  btn.disabled = checked.length === 0;
-}
 
 async function startInstall() {
   if (!currentMarketSkill) return;
   const { skill } = currentMarketSkill;
   const [owner, repo] = (skill.source || "").split("/");
 
-  const checkboxes = document.querySelectorAll(".source-checkbox input:checked");
-  const selectedSources = Array.from(checkboxes).map(cb => cb.value);
+  const selectedPills = document.querySelectorAll("#installPills .pill.selected");
+  const selectedSources = Array.from(selectedPills).map(p => p.dataset.source);
   if (selectedSources.length === 0) return;
+
+  currentInstallSources = selectedSources;
 
   const btn = document.getElementById("installBtn");
   btn.disabled = true;
   btn.textContent = "安装中...";
 
-  const progress = document.getElementById("installProgress");
-  progress.style.display = "block";
-  progress.innerHTML = "";
+  // Hide pills, show progress
+  document.getElementById("installPills").style.display = "none";
+  const progressEl = document.getElementById("installProgress");
+  progressEl.style.display = "block";
+  progressEl.innerHTML =
+    '<div class="market-install-progress-title">正在安装...</div>' +
+    '<div id="progressStepList"></div>' +
+    '<div class="market-install-progress-bar-track">' +
+      '<div class="market-install-progress-bar-fill" id="progressBarFill"></div>' +
+    '</div>' +
+    '<div class="market-install-progress-footer">' +
+      '<span class="market-install-progress-count" id="progressCount">0/' + selectedSources.length + '</span>' +
+      '<span class="market-install-progress-status" id="progressStatus"></span>' +
+    '</div>';
 
   try {
     const res = await fetch("/api/market/install", {
@@ -875,12 +902,10 @@ async function startInstall() {
     if (!res.ok) {
       const err = await res.json();
       showToast("安装失败: " + (err.detail || "未知错误"));
-      btn.disabled = false;
-      btn.textContent = "安装到选中来源";
+      resetInstallBtn();
       return;
     }
 
-    // Read SSE stream
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -888,75 +913,113 @@ async function startInstall() {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() || "";
-
       for (const line of lines) {
         if (line.startsWith("data: ")) {
           try {
             const event = JSON.parse(line.slice(6));
-            handleInstallEvent(event, progress);
-          } catch (e) {
-            // skip malformed
-          }
+            handleInstallEvent(event, selectedSources.length);
+          } catch (e) {}
         }
       }
     }
   } catch (e) {
     showToast("安装失败: " + e.message);
-    btn.disabled = false;
-    btn.textContent = "重试安装";
+    resetInstallBtn();
   }
 }
 
-function handleInstallEvent(event, progressEl) {
+function resetInstallBtn() {
+  const btn = document.getElementById("installBtn");
+  if (!btn) return;
+  btn.disabled = false;
+  btn.textContent = "安装";
+  document.getElementById("installPills").style.display = "block";
+  document.getElementById("installProgress").style.display = "none";
+  updateInstallBadge();
+}
+
+function handleInstallEvent(event, total) {
+  const stepList = document.getElementById("progressStepList");
+  const barFill = document.getElementById("progressBarFill");
+  const countEl = document.getElementById("progressCount");
+  const statusEl = document.getElementById("progressStatus");
+
   if (event.type === "progress") {
-    if (event.step === "fetch") {
-      progressEl.insertAdjacentHTML("beforeend", '<div class="progress-step">' + escHtml(event.message) + '</div>');
-      if (event.detail) {
-        progressEl.insertAdjacentHTML("beforeend", '<div class="progress-detail">└─ ' + escHtml(event.detail) + '</div>');
+    if (event.step === "install") {
+      let icon = "🔄";
+      let color = "#00d4aa";
+      if (event.status === "success") icon = "✅";
+      else if (event.status === "error") { icon = "❌"; color = "#dc2626"; }
+      else if (event.status === "skipped") { icon = "⚠️"; color = "#d97706"; }
+
+      if (stepList) {
+        stepList.innerHTML += '<div class="market-install-progress-step" style="color:' + color + '">' + icon + ' ' + escHtml(event.message || "") + '</div>';
       }
-    } else if (event.step === "install") {
-      let cls = "progress-source " + event.status;
-      let icon = "";
-      if (event.status === "success") icon = "✅ ";
-      else if (event.status === "error") icon = "❌ ";
-      else if (event.status === "skipped") icon = "⚠️ ";
-      else if (event.status === "installing") icon = "🔄 ";
-      progressEl.insertAdjacentHTML("beforeend", '<div class="' + cls + '">' + icon + escHtml(event.message || "") + "</div>");
-    }
-    if (event.completed !== undefined) {
-      const pct = event.total > 0 ? Math.round((event.completed / event.total) * 100) : 100;
-      progressEl.insertAdjacentHTML("beforeend",
-        '<div class="progress-bar">' +
-          '<div class="progress-fill" style="width:' + pct + '%"></div>' +
-        '</div>' +
-        '<div class="progress-count">' + event.completed + "/" + event.total + "</div>");
+
+      if (event.completed !== undefined && barFill) {
+        const pct = total > 0 ? Math.round((event.completed / total) * 100) : 100;
+        barFill.style.width = pct + "%";
+        if (countEl) countEl.textContent = event.completed + "/" + total;
+      }
     }
   } else if (event.type === "complete") {
     let summary = "安装完成: " + event.completed + " 成功";
     if (event.failed > 0) summary += ", " + event.failed + " 失败";
-    progressEl.insertAdjacentHTML("beforeend", '<div class="progress-complete">' + summary + '</div>');
-
+    if (statusEl) {
+      statusEl.textContent = summary;
+      statusEl.style.color = event.failed > 0 ? "#d97706" : "#059669";
+    }
     const btn = document.getElementById("installBtn");
-    if (btn) btn.style.display = "none";
+    if (btn) { btn.textContent = event.failed > 0 ? "部分完成" : "已安装"; btn.disabled = true; }
 
-    // Refresh local skills
     setTimeout(async () => {
       await loadAllSkills();
       renderTabs();
     }, 1000);
 
-  } else if (event.type === "error") {
-    progressEl.insertAdjacentHTML("beforeend", '<div class="progress-error">' + escHtml(event.message) + '</div>');
-    const btn = document.getElementById("installBtn");
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = "重试安装";
+    // Update conflicts to include newly installed sources
+    if (currentMarketSkill && currentInstallSources.length > 0) {
+      const conflicts = currentMarketSkill.skill.conflicts || [];
+      for (const src of currentInstallSources) {
+        if (!conflicts.includes(src)) conflicts.push(src);
+      }
+      currentMarketSkill.skill.conflicts = conflicts;
+      currentInstallSources = [];
     }
+  } else if (event.type === "error") {
+    if (statusEl) { statusEl.textContent = event.message; statusEl.style.color = "#dc2626"; }
+    resetInstallBtn();
   }
+}
+
+// ========= Install Panel New Logic =========
+function toggleInstallPanel() {
+  const pills = document.getElementById("installPills");
+  const arrow = document.getElementById("installArrow");
+  if (!pills) return;
+  const isOpen = pills.style.display !== "none";
+  pills.style.display = isOpen ? "none" : "block";
+  if (arrow) arrow.classList.toggle("open", !isOpen);
+}
+
+function togglePill(el) {
+  if (el.classList.contains("disabled")) return;
+  const prog = document.getElementById("installProgress");
+  if (prog && prog.style.display !== "none") return;
+  el.classList.toggle("selected");
+  updateInstallBadge();
+}
+
+function updateInstallBadge() {
+  const badge = document.getElementById("installBadge");
+  if (!badge) return;
+  const checked = document.querySelectorAll("#installPills .pill.selected").length;
+  badge.textContent = checked + " 已选";
+  const btn = document.getElementById("installBtn");
+  if (btn) btn.disabled = checked === 0;
 }
 
 // ========== Search ==========
