@@ -35,5 +35,8 @@ __pycache__/
 # But keep memory files tracked
 !.workbuddy/memory/
 
+# Worktrees
+.worktrees/
+
 # Docs (planning notes, not deliverables)
 docs/
