@@ -3,7 +3,6 @@
 > 跨 AI Agent 的 Skill 集中管理器 — 一个本地 Web 应用，把散落在 Trae / Claude / Codex / WorkBuddy 等工具中的 skills 统一管理。
 
 ![screenshot](./docs/screenshot.png)
-*（截图占位 — 主界面：左侧 skill 列表 + 来源 tab，中部文件树，右侧文件预览）*
 
 ---
 
