@@ -14,6 +14,10 @@ async function init() {
   await loadAllSkills();
   renderTabs();
   renderSkills();
+  // 默认选中列表第一个，避免右侧详情为空
+  if (filteredSkills.length > 0) {
+    selectSkill(filteredSkills[0].name);
+  }
 }
 
 async function loadSources() {
@@ -83,6 +87,10 @@ async function selectTab(sourceName) {
   selectedSkill = null;
   currentFile = null;
   renderDetail();
+  // 切到新来源后，默认选中该列表的第一个
+  if (filteredSkills.length > 0) {
+    selectSkill(filteredSkills[0].name);
+  }
 }
 
 // ========== Skill List ==========
@@ -689,6 +697,10 @@ function switchView(view) {
     renderDetail();
     applyFilter();
     renderTabs();
+    // 从市场切回本地时，默认选中列表第一个
+    if (filteredSkills.length > 0) {
+      selectSkill(filteredSkills[0].name);
+    }
   }
 }
 
