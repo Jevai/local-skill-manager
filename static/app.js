@@ -211,7 +211,7 @@ function renderFileTreeInteractive(items, skill, depth, rootName) {
       html += '<div class="ft-children" data-dir="' + escHtml(relPath) + '">' + renderFileTreeInteractive(item.children, skill, depth + 1) + "</div>";
     } else {
       html += '<div class="ft-item file" data-rel-path="' + escHtml(relPath) + '" data-depth="' + depth + '" style="padding-left:' + (12 + indent) + 'px" onclick="openFile(\'' + jsEscape(relPath) + "', this)\">" +
-        getFileIcon(item.name) + " " + escHtml(item.name) +
+        escHtml(item.name) +
       "</div>";
     }
   }
