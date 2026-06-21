@@ -342,15 +342,53 @@ body {
 /* Detail header (name + actions + locations + description) */
 .detail-header {
   padding: 20px 24px 16px;
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .detail-name {
   font-family: var(--font-mono);
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--accent);
+  position: relative;
+  display: inline-block;
+  padding: 0 2px 4px;
+  background: linear-gradient(90deg, var(--accent) 0%, #7af0d4 50%, var(--accent) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 22px;
+  animation: name-shimmer 4s ease-in-out infinite, name-slide-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.detail-name::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 2px;
+  background: radial-gradient(ellipse 55% 100% at 50% 50%, var(--accent) 0%, transparent 100%);
+  filter: blur(0.3px);
+  animation: name-underline-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes name-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@keyframes name-underline-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@keyframes name-slide-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .detail-folder-names {

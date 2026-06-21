@@ -139,15 +139,6 @@ function renderDetail() {
 
   const s = selectedSkill;
 
-  // Build source tags HTML (inline next to name)
-  let sourceTagsHtml = "";
-  for (const loc of s.locations) {
-    const tip = loc.is_symlink
-      ? loc.path + " → " + (loc.real_path || "")
-      : loc.path;
-    sourceTagsHtml += '<span class="detail-source-tag" title="' + escHtml(tip) + '">' + escHtml(loc.source_label) + "</span>";
-  }
-
   // File tree HTML (with skill name as root node)
   const treeHtml = renderFileTreeInteractive(s.file_tree, s, 0, s.name);
 
@@ -156,7 +147,6 @@ function renderDetail() {
       '<div class="detail-name-row">' +
         '<div class="detail-name-left">' +
           '<span class="detail-name">' + escHtml(s.name) + "</span>" +
-          '<span class="detail-source-tags">' + sourceTagsHtml + "</span>" +
         "</div>" +
         '<div class="detail-actions">' +
           '<button class="btn btn-copy" onclick="openCopyModal()">复制到...</button>' +
