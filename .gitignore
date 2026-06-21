@@ -39,4 +39,6 @@ __pycache__/
 .worktrees/
 
 # Docs (planning notes, not deliverables)
-docs/
+docs/*
+# But keep design documents tracked
+!docs/plans/
