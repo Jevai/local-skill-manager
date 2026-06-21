@@ -232,6 +232,87 @@ body {
   font-size: 12px;
 }
 
+/* Market Detail */
+.market-content {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.market-install {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+.install-sources-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.source-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.source-checkbox {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.source-checkbox.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--bg);
+  text-decoration: line-through;
+}
+.install-button {
+  width: 100%;
+}
+.install-progress {
+  margin-top: 12px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  line-height: 1.8;
+}
+.progress-step { color: var(--text); }
+.progress-detail { color: var(--text-dim); font-size: 11px; padding-left: 8px; }
+.progress-source.success { color: #059669; }
+.progress-source.error { color: #dc2626; }
+.progress-source.skipped { color: #d97706; }
+.progress-source.installing { color: var(--accent); }
+.progress-bar {
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  margin: 8px 0 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.progress-count { color: var(--text-dim); font-size: 11px; }
+.progress-complete { color: #059669; font-weight: 500; margin-top: 8px; }
+.progress-error { color: #dc2626; margin-top: 4px; }
+.all-installed-msg { color: var(--text-dim); font-size: 13px; text-align: center; }
+
+.detail-meta {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
 .sidebar-footer {
   padding: 10px 16px;
   font-size: 11px;

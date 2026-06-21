@@ -762,6 +762,203 @@ function formatInstalls(n) {
   return n + " 安装";
 }
 
+// ========== Market Detail & Install ==========
+let currentMarketSkill = null;
+
+async function selectMarketSkill(skill) {
+  const [owner, repo] = (skill.source || "").split("/");
+  if (!owner || !repo) {
+    showToast("无法解析 skill 来源");
+    return;
+  }
+
+  const skillId = skill.skillId || skill.name;
+  try {
+    const res = await fetch("/api/market/skill/" + owner + "/" + repo + "/" + skillId);
+    if (!res.ok) {
+      const err = await res.json();
+      showToast("获取 skill 详情失败: " + (err.detail || "网络错误"));
+      return;
+    }
+    const detail = await res.json();
+    renderMarketDetail(skill, detail);
+  } catch (e) {
+    showToast("获取 skill 详情失败: " + e.message);
+  }
+}
+
+function renderMarketDetail(skill, detail) {
+  currentMarketSkill = { skill, detail };
+  const container = document.getElementById("detail");
+  const conflictCount = skill.conflicts ? skill.conflicts.length : 0;
+  const installsLabel = formatInstalls(skill.installs);
+  const officialBadge = skill.isOfficial ? ' <span class="official-badge">官方 ✓</span>' : '';
+
+  const writableSources = sources.filter(s => s.writable);
+  let sourcesHtml = "";
+  for (const src of writableSources) {
+    const hasConflict = skill.conflicts && skill.conflicts.includes(src.name);
+    const disabled = hasConflict ? "disabled" : "";
+    const checked = hasConflict ? "" : "checked";
+    const label = src.label + (hasConflict ? " (已存在同名)" : "");
+    sourcesHtml +=
+      '<label class="source-checkbox ' + (disabled ? "disabled" : "") + '">' +
+        '<input type="checkbox" value="' + src.name + '" ' + checked + ' ' + disabled + ' onchange="updateInstallButton()"> ' +
+        escHtml(label) +
+      '</label>';
+  }
+
+  let installHtml = "";
+  if (conflictCount < writableSources.length) {
+    installHtml =
+      '<div class="market-install">' +
+        '<div class="install-sources-title">安装到:</div>' +
+        '<div class="source-checkboxes">' + sourcesHtml + '</div>' +
+        '<button class="btn btn-primary install-button" id="installBtn" onclick="startInstall()">安装到选中来源</button>' +
+        '<div class="install-progress" id="installProgress" style="display:none"></div>' +
+      '</div>';
+  } else {
+    installHtml = '<div class="market-install"><p class="all-installed-msg">已在所有来源中安装</p></div>';
+  }
+
+  container.innerHTML =
+    '<div class="detail-header">' +
+      '<div class="detail-name">' + escHtml(detail.name || skill.name) + officialBadge + '</div>' +
+      '<div class="detail-meta">' +
+        escHtml(skill.source || "") + " · " + installsLabel +
+      '</div>' +
+      '<div class="detail-desc">' + escHtml(detail.description || "(无描述)") + '</div>' +
+    '</div>' +
+    '<div class="market-content">' +
+      renderMarkdown(detail.content || "") +
+    '</div>' +
+    installHtml;
+}
+
+function updateInstallButton() {
+  const btn = document.getElementById("installBtn");
+  if (!btn) return;
+  const checked = document.querySelectorAll(".source-checkbox input:checked");
+  btn.disabled = checked.length === 0;
+}
+
+async function startInstall() {
+  if (!currentMarketSkill) return;
+  const { skill } = currentMarketSkill;
+  const [owner, repo] = (skill.source || "").split("/");
+
+  const checkboxes = document.querySelectorAll(".source-checkbox input:checked");
+  const selectedSources = Array.from(checkboxes).map(cb => cb.value);
+  if (selectedSources.length === 0) return;
+
+  const btn = document.getElementById("installBtn");
+  btn.disabled = true;
+  btn.textContent = "安装中...";
+
+  const progress = document.getElementById("installProgress");
+  progress.style.display = "block";
+  progress.innerHTML = "";
+
+  try {
+    const res = await fetch("/api/market/install", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        owner: owner,
+        repo: repo,
+        skillId: skill.skillId || skill.name,
+        sources: selectedSources,
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      showToast("安装失败: " + (err.detail || "未知错误"));
+      btn.disabled = false;
+      btn.textContent = "安装到选中来源";
+      return;
+    }
+
+    // Read SSE stream
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            handleInstallEvent(event, progress);
+          } catch (e) {
+            // skip malformed
+          }
+        }
+      }
+    }
+  } catch (e) {
+    showToast("安装失败: " + e.message);
+    btn.disabled = false;
+    btn.textContent = "重试安装";
+  }
+}
+
+function handleInstallEvent(event, progressEl) {
+  if (event.type === "progress") {
+    if (event.step === "fetch") {
+      progressEl.innerHTML += '<div class="progress-step">' + escHtml(event.message) + '</div>';
+      if (event.detail) {
+        progressEl.innerHTML += '<div class="progress-detail">└─ ' + escHtml(event.detail) + '</div>';
+      }
+    } else if (event.step === "install") {
+      let cls = "progress-source " + event.status;
+      let line = '<div class="' + cls + '">';
+      if (event.status === "success") line += "✅ ";
+      else if (event.status === "error") line += "❌ ";
+      else if (event.status === "skipped") line += "⚠️ ";
+      else if (event.status === "installing") line += "🔄 ";
+      line += escHtml(event.message || "") + "</div>";
+      progressEl.innerHTML += line;
+    }
+    if (event.completed !== undefined) {
+      const pct = Math.round((event.completed / event.total) * 100);
+      progressEl.innerHTML +=
+        '<div class="progress-bar">' +
+          '<div class="progress-fill" style="width:' + pct + '%"></div>' +
+        '</div>' +
+        '<div class="progress-count">' + event.completed + "/" + event.total + "</div>";
+    }
+  } else if (event.type === "complete") {
+    let summary = "安装完成: " + event.completed + " 成功";
+    if (event.failed > 0) summary += ", " + event.failed + " 失败";
+    progressEl.innerHTML += '<div class="progress-complete">' + summary + '</div>';
+
+    const btn = document.getElementById("installBtn");
+    if (btn) btn.style.display = "none";
+
+    // Refresh local skills
+    setTimeout(async () => {
+      await loadAllSkills();
+      renderTabs();
+    }, 1000);
+
+  } else if (event.type === "error") {
+    progressEl.innerHTML += '<div class="progress-error">' + escHtml(event.message) + '</div>';
+    const btn = document.getElementById("installBtn");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "重试安装";
+    }
+  }
+}
+
 // ========== Search ==========
 document.getElementById("search").addEventListener("input", () => {
   if (currentView === "market") {
