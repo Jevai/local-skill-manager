@@ -914,32 +914,31 @@ async function startInstall() {
 function handleInstallEvent(event, progressEl) {
   if (event.type === "progress") {
     if (event.step === "fetch") {
-      progressEl.innerHTML += '<div class="progress-step">' + escHtml(event.message) + '</div>';
+      progressEl.insertAdjacentHTML("beforeend", '<div class="progress-step">' + escHtml(event.message) + '</div>');
       if (event.detail) {
-        progressEl.innerHTML += '<div class="progress-detail">└─ ' + escHtml(event.detail) + '</div>';
+        progressEl.insertAdjacentHTML("beforeend", '<div class="progress-detail">└─ ' + escHtml(event.detail) + '</div>');
       }
     } else if (event.step === "install") {
       let cls = "progress-source " + event.status;
-      let line = '<div class="' + cls + '">';
-      if (event.status === "success") line += "✅ ";
-      else if (event.status === "error") line += "❌ ";
-      else if (event.status === "skipped") line += "⚠️ ";
-      else if (event.status === "installing") line += "🔄 ";
-      line += escHtml(event.message || "") + "</div>";
-      progressEl.innerHTML += line;
+      let icon = "";
+      if (event.status === "success") icon = "✅ ";
+      else if (event.status === "error") icon = "❌ ";
+      else if (event.status === "skipped") icon = "⚠️ ";
+      else if (event.status === "installing") icon = "🔄 ";
+      progressEl.insertAdjacentHTML("beforeend", '<div class="' + cls + '">' + icon + escHtml(event.message || "") + "</div>");
     }
     if (event.completed !== undefined) {
-      const pct = Math.round((event.completed / event.total) * 100);
-      progressEl.innerHTML +=
+      const pct = event.total > 0 ? Math.round((event.completed / event.total) * 100) : 100;
+      progressEl.insertAdjacentHTML("beforeend",
         '<div class="progress-bar">' +
           '<div class="progress-fill" style="width:' + pct + '%"></div>' +
         '</div>' +
-        '<div class="progress-count">' + event.completed + "/" + event.total + "</div>";
+        '<div class="progress-count">' + event.completed + "/" + event.total + "</div>");
     }
   } else if (event.type === "complete") {
     let summary = "安装完成: " + event.completed + " 成功";
     if (event.failed > 0) summary += ", " + event.failed + " 失败";
-    progressEl.innerHTML += '<div class="progress-complete">' + summary + '</div>';
+    progressEl.insertAdjacentHTML("beforeend", '<div class="progress-complete">' + summary + '</div>');
 
     const btn = document.getElementById("installBtn");
     if (btn) btn.style.display = "none";
@@ -951,7 +950,7 @@ function handleInstallEvent(event, progressEl) {
     }, 1000);
 
   } else if (event.type === "error") {
-    progressEl.innerHTML += '<div class="progress-error">' + escHtml(event.message) + '</div>';
+    progressEl.insertAdjacentHTML("beforeend", '<div class="progress-error">' + escHtml(event.message) + '</div>');
     const btn = document.getElementById("installBtn");
     if (btn) {
       btn.disabled = false;

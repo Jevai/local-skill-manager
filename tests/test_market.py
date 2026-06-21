@@ -26,14 +26,14 @@ def test_market_skills_search(client):
     assert res.status_code in (200, 502)
 
 
-def test_market_check(client):
+def test_market_check(client, temp_workspace):
     """GET /api/market/check/{skillId} should return per-source conflict status."""
     res = client.get("/api/market/check/find-skills")
     assert res.status_code == 200
     data = res.json()
     assert "conflicts" in data
-    for src_name in ["src", "tgt", "ro"]:
-        assert src_name in data["conflicts"], f"Missing source: {src_name}"
+    expected_sources = {s["name"] for s in temp_workspace["config"]["sources"]}
+    assert set(data["conflicts"].keys()) == expected_sources
 
 
 def test_market_skill_detail(client):

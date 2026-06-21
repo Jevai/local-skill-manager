@@ -585,47 +585,54 @@ async def market_install(request: Request):
         failed = 0
 
         try:
-            # Step 1: Fetch files from GitHub
+            # Step 1: Recursively fetch files from GitHub
             yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': '正在从 GitHub 获取 skill 文件...'})}\n\n"
 
             async with await get_http_client() as client:
-                dir_url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{skill_id}"
-                headers = {"Accept": "application/vnd.github.v3+json"}
-                dir_resp = await client.get(dir_url, headers=headers)
-
-                if dir_resp.status_code == 404:
-                    yield f"data: {json_mod.dumps({'type': 'error', 'message': f'Skill 不存在: {owner}/{repo}/{skill_id}'})}\n\n"
-                    return
-                if dir_resp.status_code in (403, 429) and dir_resp.headers.get("X-RateLimit-Remaining") == "0":
-                    reset_ts = dir_resp.headers.get("X-RateLimit-Reset", "")
-                    reset_msg = f"，重置时间 UTC {reset_ts}" if reset_ts else ""
-                    yield f"data: {json_mod.dumps({'type': 'error', 'message': f'GitHub API 速率限制已达上限{reset_msg}，请稍后重试'})}\n\n"
-                    return
-                dir_resp.raise_for_status()
-                files_info = dir_resp.json()
-
-                if not isinstance(files_info, list):
-                    files_info = [files_info]
-
                 fetched = 0
-                for fi in files_info:
-                    if fi.get("type") != "file":
-                        continue
-                    try:
-                        raw_url = fi.get("download_url")
-                        if not raw_url:
-                            continue
-                        file_resp = await client.get(raw_url)
-                        file_resp.raise_for_status()
-                        skills.append({
-                            "name": fi["name"],
-                            "path": fi.get("path", fi["name"]),
-                            "content": file_resp.text if isinstance(file_resp.text, str) else file_resp.content,
-                        })
-                        fetched += 1
-                        yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': f'已获取 {fetched} 个文件', 'detail': fi['name']})}\n\n"
-                    except Exception as e:
-                        yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': f'获取文件 {fi.get('name', '?')} 失败: {str(e)}', 'warning': True})}\n\n"
+                headers = {"Accept": "application/vnd.github.v3+json"}
+
+                async def fetch_dir_recursive(api_path: str, skill_prefix: str):
+                    """Recursively fetch a directory from GitHub Contents API."""
+                    nonlocal fetched
+                    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{api_path}"
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 404:
+                        return
+                    if resp.status_code in (403, 429) and resp.headers.get("X-RateLimit-Remaining") == "0":
+                        reset_ts = resp.headers.get("X-RateLimit-Reset", "")
+                        reset_msg = f"，重置时间 UTC {reset_ts}" if reset_ts else ""
+                        raise HTTPException(429, f"GitHub API 速率限制已达上限{reset_msg}，请稍后重试")
+                    resp.raise_for_status()
+                    entries = resp.json()
+                    if not isinstance(entries, list):
+                        entries = [entries]
+
+                    for entry in entries:
+                        if entry.get("type") == "dir":
+                            await fetch_dir_recursive(entry["path"], skill_prefix)
+                        elif entry.get("type") == "file":
+                            try:
+                                raw_url = entry.get("download_url")
+                                if not raw_url:
+                                    continue
+                                file_resp = await client.get(raw_url)
+                                file_resp.raise_for_status()
+                                # Store path relative to skill root
+                                rel = entry.get("path", entry["name"])
+                                if rel.startswith(skill_prefix + "/"):
+                                    rel = rel[len(skill_prefix) + 1:]
+                                skills.append({
+                                    "name": os.path.basename(rel),
+                                    "path": rel,
+                                    "content": file_resp.text if isinstance(file_resp.text, str) else file_resp.content,
+                                })
+                                fetched += 1
+                                yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': f'已获取 {fetched} 个文件', 'detail': entry['name']})}\n\n"
+                            except Exception as e:
+                                yield f"data: {json_mod.dumps({'type': 'progress', 'step': 'fetch', 'message': f'获取文件 {entry.get('name', '?')} 失败: {str(e)}', 'warning': True})}\n\n"
+
+                await fetch_dir_recursive(skill_id, skill_id)
 
             if not skills:
                 yield f"data: {json_mod.dumps({'type': 'error', 'message': 'Skill 仓库中未找到任何文件'})}\n\n"
@@ -651,14 +658,17 @@ async def market_install(request: Request):
                         continue
 
                     os.makedirs(target_dir, exist_ok=True)
-                    for skill in skills:
-                        file_path = os.path.normpath(os.path.join(target_dir, skill["name"]))
+                    for sk in skills:
+                        # Use path (relative to skill root) to preserve subdirectory structure
+                        rel = sk.get("path", sk["name"])
+                        file_path = os.path.normpath(os.path.join(target_dir, rel))
                         if not file_path.startswith(target_dir):
                             continue
-                        mode = "wb" if isinstance(skill["content"], bytes) else "w"
-                        encoding = None if isinstance(skill["content"], bytes) else "utf-8"
+                        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                        mode = "wb" if isinstance(sk["content"], bytes) else "w"
+                        encoding = None if isinstance(sk["content"], bytes) else "utf-8"
                         with open(file_path, mode, encoding=encoding) as f:
-                            f.write(skill["content"])
+                            f.write(sk["content"])
 
                     step["status"] = "success"
                     completed += 1
