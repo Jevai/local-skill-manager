@@ -92,13 +92,16 @@ function renderSkills() {
     el.className = "skill-item" + (selectedSkill && selectedSkill.name === skill.name ? " active" : "");
     el.onclick = () => selectSkill(skill.name);
     const readonly = !skill.can_delete;
+    // Build unique source labels as tags
+    const sourceLabels = [...new Set(skill.locations.map(l => l.source_label))];
+    const tagsHtml = sourceLabels.map(lb =>
+      '<span class="source-tag">' + escHtml(lb) + "</span>"
+    ).join("");
+
     el.innerHTML =
       '<div class="skill-item-name">' + escHtml(skill.name) + "</div>" +
       '<div class="skill-item-desc">' + escHtml(truncate(skill.description || "", 50)) + "</div>" +
-      '<div class="skill-item-meta">' +
-        '<span class="' + (readonly ? "readonly" : "writable") + '">' + (readonly ? "只读" : "可写") + "</span>" +
-        "<span>" + skill.locations.length + " 位置</span>" +
-      "</div>";
+      '<div class="skill-item-meta">' + tagsHtml + "</div>";
     container.appendChild(el);
   }
   document.getElementById("footer").textContent = "共 " + filteredSkills.length + " 个 skill";
@@ -231,9 +234,11 @@ async function openFile(relPath, el) {
 
   const url = "/api/skills/" + encodeURIComponent(selectedSkill.name) + "/file?path=" + encodeURIComponent(relPath);
   const res = await fetch(url);
-  let content = await res.text();
+  const content = await res.text();
 
-  const ext = relPath.split(".").pop().toLowerCase();
+  // Robust extension extraction: get chars after last dot, trim whitespace
+  const lastDot = relPath.lastIndexOf(".");
+  const ext = lastDot >= 0 ? relPath.slice(lastDot + 1).trim().toLowerCase() : "";
   const bodyEl = document.getElementById("fileContentBody");
 
   if (ext === "md") {
@@ -465,8 +470,25 @@ function renderMarkdown(md) {
     return r;
   }
 
+  let inFrontmatter = false;
+  let frontmatterStart = false;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    const trimmed = line.trim();
+
+    // Handle YAML frontmatter (--- at start of file)
+    if (i === 0 && trimmed === "---") {
+      inFrontmatter = true;
+      frontmatterStart = true;
+      continue;
+    }
+    if (frontmatterStart && trimmed === "---") {
+      inFrontmatter = false;
+      frontmatterStart = false;
+      continue;
+    }
+    if (inFrontmatter) continue;
 
     if (line.startsWith("```")) {
       flushTable();
@@ -485,7 +507,6 @@ function renderMarkdown(md) {
     }
 
     // Table detection
-    const trimmed = line.trim();
     if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
       if (!inTable) { flushTable(); inTable = true; }
       tableRows.push(line);

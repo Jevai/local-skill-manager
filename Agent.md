@@ -1,0 +1,74 @@
+# SkillManager — Agent 记录
+
+## 项目概述
+
+SkillManager 是一个本地 Web 应用，用于集中管理散落在各 AI 代理工具中的 skills。
+通过自扫描 7 个 skill 来源目录，提供统一的浏览、检索、查看和删除功能。
+
+- **后端**：Python 3.13 + FastAPI
+- **前端**：原生 HTML/CSS/JS（单文件 SPA，无框架依赖）
+- **启动**：`start.bat` 或 `python main.py`，默认端口 7788
+- **架构**：FastAPI 提供 REST API + 静态文件服务，前端用 fetch 调用后端接口
+
+---
+
+## 项目要求
+
+1. **Git 提交规则**：每完成一个完整的功能点 / bug 修复 / 重构，立即做一次 git 提交，不累积多个改动。提交信息用中文简要描述。
+2. **代码风格**：保持简洁，优先使用原生 API，不引入不必要的依赖。
+3. **前端原则**：单文件 HTML（内联 CSS/JS 可选），无框架依赖。组件去重、关注点分离。
+4. **安全性**：删除操作需要二次确认；symlink 目录只删链接不删目标内容。
+5. **文件操作**：`.workbuddy/` 目录存放项目数据，不可删除。
+6. **迭代方式**：架构确定后，逐步迭代 UI/UX 细节，不一步到位。
+
+---
+
+## 功能清单
+
+| 状态 | 功能 | 说明 |
+|------|------|------|
+| ✅ | 浏览/检索 skills | 跨 7 个来源，支持关键词搜索 |
+| ✅ | 来源 tab 切换 | 按来源过滤，显示每个来源的 skill 数量 |
+| ✅ | 左侧文件树 | 点击 skill 展开文件列表 |
+| ✅ | 右侧文件内容 | 渲染 .md 文件，其他文件纯文本展示 |
+| ✅ | 删除功能 | 二次确认弹窗；symlink 目录只删链接 |
+| ⬜ | Skill 创建/编辑 | 新建 skill、编辑 SKILL.md frontmatter |
+| ⬜ | 跨来源移动 | 将 skill 从一个来源复制/移动到另一个 |
+
+---
+
+## Skill 来源
+
+| name | label | 路径 | 可写 |
+|------|-------|------|------|
+| agents | 全局 | `C:/Users/31585/.agents/skills/` | ✅ |
+| trae | Trae CN | `C:/Users/31585/.trae-cn/skills/` | ✅ |
+| codex | Codex | `C:/Users/31585/.codex/skills/` | ✅ (排除 `.system`) |
+| claude | Claude Code | `C:/Users/31585/.claude/skills/` | ✅ |
+| workbuddy | WorkBuddy 用户级 | `C:/Users/31585/.workbuddy/skills/` | ✅ |
+| trae_builtin | Trae 内置 | `C:/Users/31585/.trae-cn/builtin_skills/` | ❌ |
+| trae_builtin_global | Trae 内置全局 | `C:/Users/31585/.trae-cn/builtin/global/skills/` | ❌ |
+
+---
+
+## API 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/skills` | 获取所有 skills（支持 `?source=` 过滤） |
+| GET | `/api/skills/{name}/files` | 获取某个 skill 的文件树 |
+| GET | `/api/skills/{name}/file?path=` | 读取某个文件内容 |
+| DELETE | `/api/skills/{name}` | 删除 skill |
+| GET | `/api/sources` | 获取来源配置 |
+
+---
+
+## 变更记录
+
+| 日期 | 版本 | 变更 |
+|------|------|------|
+| 2026-06-20 | v0.1.0 | 初始版本：MVP 发布。支持 7 来源扫描、tab 切换、文件树浏览、markdown 渲染 |
+| 2026-06-20 | v0.1.1 | 修复删除 API 路径匹配 bug（路径格式不一致 + 前端发送 dict 列表未提取 path） |
+| 2026-06-20 | v0.1.2 | 简化渲染逻辑：仅渲染 .md，移除语法高亮 |
+| 2026-06-21 | v0.1.3 | 撤销简化 → 恢复功能完整性 |
+| 2026-06-21 | v0.1.4 | 创建 Agent.md，建立项目功能与变更记录档案 |
