@@ -140,8 +140,8 @@ function renderDetail() {
     sourceTagsHtml += '<span class="detail-source-tag" title="' + escHtml(tip) + '">' + escHtml(loc.source_label) + "</span>";
   }
 
-  // File tree HTML
-  const treeHtml = renderFileTreeInteractive(s.file_tree, s);
+  // File tree HTML (with skill name as root node)
+  const treeHtml = renderFileTreeInteractive(s.file_tree, s, 0, s.name);
 
   container.innerHTML =
     '<div class="detail-header">' +
@@ -187,10 +187,21 @@ function renderDetail() {
 }
 
 // ========== File Tree ==========
-function renderFileTreeInteractive(items, skill, depth) {
+function renderFileTreeInteractive(items, skill, depth, rootName) {
   if (!items || !items.length) return "";
   if (depth === undefined) depth = 0;
   let html = "";
+
+  // Render skill name as non-clickable root node at depth 0
+  if (depth === 0 && rootName) {
+    html += '<div class="ft-item dir ft-root" data-depth="0" style="padding-left:12px">' +
+      escHtml(rootName) + "/" +
+    "</div>";
+    // Children are always open for the root
+    html += '<div class="ft-children open">' + renderFileTreeInteractive(items, skill, depth + 1) + "</div>";
+    return html;
+  }
+
   for (const item of items) {
     const relPath = item.rel_path;
     const indent = depth * 16;
@@ -209,11 +220,14 @@ function renderFileTreeInteractive(items, skill, depth) {
 }
 
 function toggleDir(el) {
+  // Root node (skill name) is not collapsible
+  if (el.classList.contains("ft-root")) return;
   let children = el.nextElementSibling;
   if (!children || !children.classList.contains("ft-children")) return;
   const isOpen = children.classList.contains("open");
   children.classList.toggle("open");
-  el.querySelector(".arrow").classList.toggle("open", !isOpen);
+  const arrow = el.querySelector(".arrow");
+  if (arrow) arrow.classList.toggle("open", !isOpen);
 }
 
 async function openFile(relPath, el) {
