@@ -414,131 +414,29 @@ function highlightSql(code) {
   return result;
 }
 
-// ========== Simple Markdown Renderer ==========
+// ========== Markdown Renderer (powered by marked.js) ==========
 function renderMarkdown(md) {
-  let html = "";
-  const lines = md.split("\n");
-  let inCodeBlock = false;
-  let codeLang = "";
-  let codeContent = [];
-  let inTable = false;
-  let tableRows = [];
-
-  function flushCode() {
-    if (inCodeBlock) {
-      const raw = codeContent.join("\n");
-      const ext = codeLang || "txt";
-      let rendered;
-      if (ext === "json") {
-        try { rendered = highlightJson(JSON.stringify(JSON.parse(raw), null, 2)); }
-        catch(e) { rendered = escHtml(raw); }
-      } else if (["py","js","ts"].includes(ext)) { rendered = highlightCode(raw, ext); }
-      else if (["yaml","yml"].includes(ext)) { rendered = highlightYaml(raw); }
-      else if (ext === "sh") { rendered = highlightSh(raw); }
-      else if (ext === "sql") { rendered = highlightSql(raw); }
-      else { rendered = escHtml(raw); }
-      html += '<pre class="md-code"><code class="hl-code">' + rendered + "</code></pre>";
-      codeContent = [];
-      inCodeBlock = false;
-      codeLang = "";
+  if (!md) return '<p class="md-empty">(空文件)</p>';
+  // Configure marked once
+  if (!renderMarkdown._inited) {
+    renderMarkdown._inited = true;
+    if (typeof marked !== "undefined") {
+      marked.setOptions({
+        gfm: true,
+        breaks: false
+      });
     }
   }
-
-  function flushTable() {
-    if (inTable && tableRows.length > 0) {
-      html += '<table class="md-table">';
-      let ri = 0;
-      for (const row of tableRows) {
-        if (ri === 1) { ri++; continue; } // skip separator
-        const tag = ri === 0 ? "th" : "td";
-        const cells = row.split("|").map(c => c.trim()).filter(Boolean);
-        html += "<tr>" + cells.map(c => "<" + tag + ">" + renderInline(c) + "</" + tag + ">").join("") + "</tr>";
-        ri++;
-      }
-      html += "</table>";
-      tableRows = [];
-      inTable = false;
+  // Strip YAML frontmatter if present
+  let content = md;
+  const firstLine = content.split("\n")[0].trim();
+  if (firstLine === "---") {
+    const endIdx = content.indexOf("\n---\n", 4);
+    if (endIdx >= 0) {
+      content = content.slice(endIdx + 5);
     }
   }
-
-  function renderInline(text) {
-    let r = escHtml(text);
-    r = r.replace(/`([^`]+)`/g, "<code>$1</code>");
-    r = r.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
-    r = r.replace(/\*(.+?)\*/g, "<em>$1</em>");
-    r = r.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    return r;
-  }
-
-  let inFrontmatter = false;
-  let frontmatterStart = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
-
-    // Handle YAML frontmatter (--- at start of file)
-    if (i === 0 && trimmed === "---") {
-      inFrontmatter = true;
-      frontmatterStart = true;
-      continue;
-    }
-    if (frontmatterStart && trimmed === "---") {
-      inFrontmatter = false;
-      frontmatterStart = false;
-      continue;
-    }
-    if (inFrontmatter) continue;
-
-    if (line.startsWith("```")) {
-      flushTable();
-      if (!inCodeBlock) {
-        inCodeBlock = true;
-        codeLang = line.slice(3).trim();
-      } else {
-        flushCode();
-      }
-      continue;
-    }
-
-    if (inCodeBlock) {
-      codeContent.push(line);
-      continue;
-    }
-
-    // Table detection
-    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
-      if (!inTable) { flushTable(); inTable = true; }
-      tableRows.push(line);
-      continue;
-    } else if (inTable) {
-      flushTable();
-    }
-
-    if (trimmed.startsWith("### ")) {
-      html += "<h3>" + renderInline(trimmed.slice(4)) + "</h3>\n";
-    } else if (trimmed.startsWith("## ")) {
-      html += "<h2>" + renderInline(trimmed.slice(3)) + "</h2>\n";
-    } else if (trimmed.startsWith("# ")) {
-      html += "<h1>" + renderInline(trimmed.slice(2)) + "</h1>\n";
-    } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
-      html += "<hr>\n";
-    } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-      html += "<ul><li>" + renderInline(trimmed.slice(2)) + "</li></ul>\n";
-    } else if (/^\d+\.\s/.test(trimmed)) {
-      html += "<ol><li>" + renderInline(trimmed.replace(/^\d+\.\s/, "")) + "</li></ol>\n";
-    } else if (trimmed.startsWith("> ")) {
-      html += "<blockquote>" + renderInline(trimmed.slice(2)) + "</blockquote>\n";
-    } else if (trimmed === "") {
-      html += "\n";
-    } else {
-      html += "<p>" + renderInline(line) + "</p>\n";
-    }
-  }
-
-  flushCode();
-  flushTable();
-
+  const html = '<div class="markdown-content">' + (typeof marked !== "undefined" ? marked.parse(content) : escHtml(content)) + '</div>';
   return html || '<p class="md-empty">(空文件)</p>';
 }
 

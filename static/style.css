@@ -489,6 +489,30 @@ body {
   text-decoration: underline;
 }
 
+.markdown-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.markdown-content table th,
+.markdown-content table td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.markdown-content table th {
+  background: var(--bg-hover);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.markdown-content table tr:nth-child(even) td {
+  background: rgba(255,255,255,0.02);
+}
+
 /* Markdown content */
 .markdown-content {
   font-size: 14px;
