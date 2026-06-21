@@ -277,6 +277,134 @@ async def delete_skill(name: str, request: Request):
     return SafeJSONResponse({"deleted": deleted, "skipped": skipped})
 
 
+@app.post("/api/skills/copy/check")
+async def copy_skill_check(request: Request):
+    import json as json_mod
+    body = await request.json()
+    skill_name = body.get("skill_name", "").strip()
+    source_id = body.get("source_id", "").strip()
+    target_id = body.get("target_id", "").strip()
+
+    config = load_config()
+    source_names = {s["name"] for s in config["sources"]}
+    if source_id not in source_names:
+        raise HTTPException(400, f"Unknown source: {source_id}")
+    if target_id not in source_names:
+        raise HTTPException(400, f"Unknown target: {target_id}")
+    if source_id == target_id:
+        raise HTTPException(400, "Source and target must differ")
+
+    target_src = next(s for s in config["sources"] if s["name"] == target_id)
+    if not target_src["writable"]:
+        raise HTTPException(400, "Target source is read-only")
+
+    skills = scan_skills(source_id)
+    target_skill = None
+    for s in skills:
+        if s["name"] == skill_name:
+            target_skill = s
+            break
+    if not target_skill:
+        raise HTTPException(404, f"Skill '{skill_name}' not found in source '{source_id}'")
+
+    src_path = target_skill["locations"][0]["path"]
+    target_base = target_src["path"]
+    dst_path = os.path.join(target_base, skill_name)
+
+    if os.path.exists(dst_path):
+        file_count = 0
+        total_size = 0
+        try:
+            for root, dirs, files in os.walk(dst_path):
+                for f in files:
+                    fp = os.path.join(root, f)
+                    if os.path.exists(fp):
+                        file_count += 1
+                        total_size += os.path.getsize(fp)
+        except Exception:
+            pass
+        return SafeJSONResponse({
+            "conflict": True,
+            "existing_skill": {
+                "name": skill_name,
+                "source_id": target_id,
+                "path": dst_path,
+                "file_count": file_count,
+                "size_kb": total_size // 1024
+            }
+        })
+
+    shutil.copytree(src_path, dst_path)
+    return SafeJSONResponse({
+        "conflict": False,
+        "success": True,
+        "action": "copied",
+        "skill_name": skill_name,
+        "target_path": dst_path
+    })
+
+
+@app.post("/api/skills/copy")
+async def copy_skill(request: Request):
+    import json as json_mod
+    body = await request.json()
+    skill_name = body.get("skill_name", "").strip()
+    source_id = body.get("source_id", "").strip()
+    target_id = body.get("target_id", "").strip()
+    strategy = body.get("strategy", "skip").strip()
+
+    if strategy not in ("overwrite", "skip", "rename"):
+        raise HTTPException(400, f"Invalid strategy: {strategy}")
+
+    config = load_config()
+    source_names = {s["name"] for s in config["sources"]}
+    if source_id not in source_names:
+        raise HTTPException(400, f"Unknown source: {source_id}")
+    if target_id not in source_names:
+        raise HTTPException(400, f"Unknown target: {target_id}")
+    if source_id == target_id:
+        raise HTTPException(400, "Source and target must differ")
+
+    target_src = next(s for s in config["sources"] if s["name"] == target_id)
+    if not target_src["writable"]:
+        raise HTTPException(400, "Target source is read-only")
+
+    skills = scan_skills(source_id)
+    target_skill = None
+    for s in skills:
+        if s["name"] == skill_name:
+            target_skill = s
+            break
+    if not target_skill:
+        raise HTTPException(404, f"Skill '{skill_name}' not found in source '{source_id}'")
+
+    src_path = target_skill["locations"][0]["path"]
+    target_base = target_src["path"]
+    dst_path = os.path.join(target_base, skill_name)
+
+    if strategy == "skip":
+        if os.path.exists(dst_path):
+            return SafeJSONResponse({"success": True, "action": "skipped", "skill_name": skill_name, "target_path": dst_path})
+        shutil.copytree(src_path, dst_path)
+        return SafeJSONResponse({"success": True, "action": "copied", "skill_name": skill_name, "target_path": dst_path})
+
+    if strategy == "overwrite":
+        if os.path.exists(dst_path):
+            shutil.rmtree(dst_path)
+        shutil.copytree(src_path, dst_path)
+        return SafeJSONResponse({"success": True, "action": "copied", "skill_name": skill_name, "target_path": dst_path})
+
+    # strategy == "rename"
+    final_name = skill_name
+    counter = 0
+    while os.path.exists(os.path.join(target_base, final_name)):
+        counter += 1
+        final_name = skill_name + "_copy" if counter == 1 else f"{skill_name}_copy{counter}"
+    final_dst = os.path.join(target_base, final_name)
+    shutil.copytree(src_path, final_dst)
+    return SafeJSONResponse({"success": True, "action": "renamed", "renamed_to": final_name, "skill_name": skill_name, "target_path": final_dst})
+
+
 # Serve static files
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)
