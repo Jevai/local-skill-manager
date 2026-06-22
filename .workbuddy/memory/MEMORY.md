@@ -25,10 +25,10 @@
 
 | name | label | 路径 |
 |---|---|---|
-| agents | 全局 | C:/Users/31585/.agents/skills/ |
+| agents | 默认 | C:/Users/31585/.agents/skills/ |
 | trae | Trae CN | C:/Users/31585/.trae-cn/skills/ |
 | codex | Codex | C:/Users/31585/.codex/skills/ |
-| claude | Claude | C:/Users/31585/.claude/skills/ |
-| workbuddy | WorkBuddy | C:/Users/31585/.workbuddy/skills/ |
+| claude | Claude Code | C:/Users/31585/.claude/skills/ |
+| workbuddy | WorkBuddy 用户级 | C:/Users/31585/.workbuddy/skills/ |
 | trae_builtin | Trae 内置 | C:/Users/31585/.trae-cn/builtin_skills/ |
 | trae_builtin_global | Trae 全局内置 | C:/Users/31585/.trae-cn/builtin/global/skills/ |
