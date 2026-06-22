@@ -2,7 +2,7 @@
   "sources": [
     {
       "name": "agents",
-      "label": "全局",
+      "label": "默认",
       "path": "C:/Users/31585/.agents/skills",
       "writable": true
     },
