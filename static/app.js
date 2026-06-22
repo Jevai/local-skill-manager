@@ -2,7 +2,7 @@
 let allSkills = [];       // ALL skills from ALL sources (fetched once)
 let filteredSkills = [];   // allSkills filtered by source + search
 let selectedSkill = null;
-let selectedSource = "agents"; // default tab
+let selectedSource = "all"; // default tab
 let sources = [];
 let currentFile = null;
 let currentView = "local";  // "local" | "market"
